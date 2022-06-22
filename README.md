@@ -3,4 +3,4 @@ Adapative modelling frame work to model a potential African Swine Fever outbreak
 
 Model is written in Julia and uses tau-leaping. A diagram of meta-population structure is given in below
 
-![ASF Structure](ASF_structure.png?raw=true "Title")
+![ASF Structure](ASF_structure.png?raw=true "ASF Meta-population")
