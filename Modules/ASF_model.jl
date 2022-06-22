@@ -1,9 +1,13 @@
 module ASF_Model
 using LinearAlgebra
 using Statistics
+using JLD2
+using CSV
+using DelimitedFiles
 export density_rate
 export analyse_out
 export frequency_rate
+export save_output
 
 function density_rate(out,u,p,t)
    
@@ -227,12 +231,12 @@ function rebeta!(beta, counts, pops)
     
 end
 
-function analyse_out(input, n_ens, counts)
+function analyse_out(input, counts)
+    
+    classes, t_steps, n_ens = size(input) 
     
     nft_alive = Vector{Vector{Float64}}(undef, n_ens)
-
     nft_exposed = Vector{Vector{Float64}}(undef, n_ens)
-    
     
     
     nlt_alive = Vector{Vector{Float64}}(undef, n_ens)
@@ -336,16 +340,56 @@ function analyse_out(input, n_ens, counts)
     println("% of groups that survive in each population:")
     println(mean(nft_alive))
     println("------------------------------------------------")
-    println("% of farms exposed to ASF in each population:")
-    println(mean(nlt_exposed))
-    println("------------------------------------------------")
+    if sum(counts.farm) > 0 
+        println("% of farms exposed to ASF in each population:")
+        println(mean(nlt_exposed))
+        println("------------------------------------------------")
 
-    println("% of farms that survive in each population:")
-    println(mean(nlt_alive))
-    
+        println("% of farms that survive in each population:")
+        println(mean(nlt_alive))
+    end 
     
     #return mean(nft_alive), mean(nft_exposed), mean(nlt_alive), mean(nlt_exposed)
 
+end
+function save_output(output, data, path, name)
+    #=
+    Function to save output
+    =#
+    
+    dims = length(size(output))
+    
+    if dims == 3 #ensemble run
+        classes, t_steps, n_ens = size(output)
+    else #single run
+        classes, t_steps = size(output)
+        n_ens = 1
+    end
+    
+    #making save directory
+    dir = string(path, "Results/", name)
+    
+    isdir(dir) || mkdir(dir)
+    cd(dir)
+
+    #copying inputs
+    cp(string(path,"Inputs"), "Inputs",force = true)
+    
+    #saving run parameters
+    save_object("parameters.jdl2", data)
+    
+    #saving output
+    if dims == 3 #ensemble
+        for i = 1:n_ens
+            solnew = vcat(output.u[i].t',output[:,:,i])' #data
+            writedlm( string("ASF_",i,".csv"),  solnew, ',')
+        end
+    else
+        solnew = vcat(sol.t',sol[:,:,i])'
+        writedlm( "ASF_single",  solnew, ',')
+    end
+    
+    
 end
 
 
