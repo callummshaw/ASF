@@ -4,10 +4,13 @@ using Statistics
 using JLD2
 using CSV
 using DelimitedFiles
+using GraphPlot,Compose,Graphs,Colors,Cairo
+
 export density_rate
 export analyse_out
 export frequency_rate
 export save_output
+export plot_network
 
 function density_rate(out,u,p,t)
    
@@ -83,7 +86,7 @@ function frequency_rate(out,u,p,t)
     tp = Pops.cum_sum[end]
     beta = copy(p.β)
     
-    reference_density = 3
+    reference_density = 4
     
     for i in 1:Pops.pop
         j = i + 1 
@@ -352,6 +355,7 @@ function analyse_out(input, counts)
     #return mean(nft_alive), mean(nft_exposed), mean(nlt_alive), mean(nlt_exposed)
 
 end
+
 function save_output(output, data, path, name)
     #=
     Function to save output
@@ -392,5 +396,64 @@ function save_output(output, data, path, name)
     
 end
 
+function plot_network(input, output)
+    connections = input.Parameters.β_b
+    gg = Graphs.SimpleGraph(connections)
+
+    
+    dims = length(size(output))
+    
+    if dims == 3 #ensemble run
+        classes, t_steps, n_ens = size(output)
+    else #single run
+        classes, t_steps = size(output)
+        n_ens = 1
+    end
+
+    storage = zeros(t_steps, div(classes,5))
+
+    for i = 1:n_ens
+
+        data  = vcat(output[:,:,i])'
+        E = data[:,2:5:end];
+        I = data[:,3:5:end];
+        C = data[:,5:5:end];
+
+        NI = E + I + C
+
+        NI[NI .> 0 ] .= 1
+
+        storage += NI
+    end
+    
+    
+    node_status = floor.(Int,storage /20) .+ 2
+    node_status[storage .== 0] .= 1
+    
+    nodecolor = [colorant"#FCE1A4",colorant"#FABF7B",colorant"#F08F6E",colorant"#E05C5C",colorant"#D12959", colorant"#AB1866",colorant"#6E005F"]
+    
+    # membership color
+    #1- 0% FCE1A4 
+    #2- 1-19% FABF7B
+    #3- 20-39% F08F6E
+    #4- 40-59% E05C5C
+    #5- 60-79% D12959
+    #6- 80-99% AB1866
+    #7- 100% 6E005F
+    
+    #where to save
+    cd("/home/callum/ASF/Results/Plots/")
+    
+    #assuming 10 time steps per day, therefor 300 per month, will plot monthly
+    period = 300
+    n_months = div(t_steps, period)
+    
+    for i = 1:n_months
+        j = period*(i-1)+1
+        nodefillc = nodecolor[node_status[j,:]]
+        draw(PNG(string("Sample_",i,".png"), 20cm, 20cm), gplot(gg, nodefillc=nodefillc, layout=circular_layout))
+    end
+    
+end
 
 end
