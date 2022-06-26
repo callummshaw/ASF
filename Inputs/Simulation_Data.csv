@@ -5,7 +5,7 @@ Years,1
 #Run in an ensemble? if unwanted set to 1
 N_ensemble,100
 #Param values from means or distribution
-Identical,true
+Identical,false
 #Number of Populations
 N_Pop,1
 #Number of Populations seeded with asf (will seed into a single group within population)

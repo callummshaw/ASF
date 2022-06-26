@@ -116,7 +116,7 @@ struct Population_Breakdown
     end
 end 
 
-struct Model_Parameters
+mutable Sstruct Model_Parameters
     #=
     Structure to store key parameters
     =#
