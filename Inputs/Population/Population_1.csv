@@ -19,9 +19,9 @@ Farm_Feral,0.01,0
 #Death Probability
 Death,0.95,0.01
 #Recovery Rate
-Recovery,0.143,0.05
+Recovery,0.143,0.02
 #Latent Rate
-Latent,0.143,0.05
+Latent,0.143,0.02
 #Corpse infection modifier
 Corpse,0.5,0
 #Corpse decay rate farm

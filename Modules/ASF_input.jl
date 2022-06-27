@@ -116,7 +116,7 @@ struct Population_Breakdown
     end
 end 
 
-mutable Sstruct Model_Parameters
+mutable struct Model_Parameters
     #=
     Structure to store key parameters
     =#
@@ -156,7 +156,7 @@ struct Model_Data
     Time::Tuple{Float64, Float64} #Model run time
     U0::Vector{Int64} #Initial Population
     Parameters::Model_Parameters #Model parameters
-    
+    Populations_data::Vector{Population_Data} #distributions for params
     function Model_Data(Path)
         sim, pops = read_inputs(Path)
         
@@ -166,7 +166,7 @@ struct Model_Data
         
         Parameters = Model_Parameters(sim, pops, U0, counts)
         
-        new(Time, U0, Parameters)
+        new(Time, U0, Parameters, pops)
         
     end
     
@@ -355,9 +355,9 @@ function infected_populations(input)
     Ni = parse(Int64, input.Value[4])
 
     if Ni == 1
-        println("-------------------------------------")
-        println("Single Population!\nThe Only Population is Seeded With ASF!")
-        println("-------------------------------------") 
+        #println("-------------------------------------")
+        #println("Single Population!\nThe Only Population is Seeded With ASF!")
+        #println("-------------------------------------") 
         numv = [1]
     else
         println("-------------------------------------")

@@ -5,12 +5,14 @@ using JLD2
 using CSV
 using DelimitedFiles
 using GraphPlot,Compose,Graphs,Colors,Cairo
+using Distributions
 
 export density_rate
 export analyse_out
 export frequency_rate
 export save_output
 export plot_network
+export reparam!
 
 function density_rate(out,u,p,t)
    
@@ -128,9 +130,13 @@ function frequency_rate(out,u,p,t)
     out[10:10:end] = Decay_C
 end
 
-function reparam!(params, init_pops, pops, counts)
+function reparam!(input)
 
-    β = rebeta!(params[1], counts, pops) #keeping same links but assinging new values
+    rebeta!(input) #keeping same links but assinging new values
+    
+    init_pops = input.U0
+    pops = input.Populations_data
+    counts = input.Parameters.Populations
     
     K = init_pops[1:5:end] + init_pops[2:5:end] + init_pops[3:5:end] #carrying capacity of each group
     
@@ -182,21 +188,37 @@ function reparam!(params, init_pops, pops, counts)
         
     end
     
-    p = [β, ζ, γ, μ_b, μ_d, μ_g, ω, ρ, λ, params[end]]
     
-
-    return p
+    
+    input.Parameters.γ = γ
+    input.Parameters.ζ = ζ
+    input.Parameters.λ = λ
+    input.Parameters.μ_b = μ_b 
+    input.Parameters.μ_d = μ_d
+    input.Parameters.μ_g = μ_g
+    input.Parameters.ω = ω 
+    input.Parameters.ρ = ρ
+    
 end
 
-function rebeta!(beta, counts, pops)
+function rebeta!(input)
+    
+    
+    pops = input.Populations_data
+    counts = input.Parameters.Populations
+    
+    beta = copy(input.Parameters.β)
+    
     for i in 1:counts.pop
 
             data = pops[i]
             nf = counts.feral[i]
             nt = counts.total[i]
-
+            
             beta_sub = beta[counts.cum_sum[i]+1:counts.cum_sum[i+1],counts.cum_sum[i]+1:counts.cum_sum[i+1]]
-
+            
+            n_aim = data.N_int[1]
+        
             i_f = TruncatedNormal(data.B_f[1],data.B_f[2],0,5) #intra group
             i_ff = TruncatedNormal(data.B_ff[1],data.B_ff[2],0,5) #inter group
 
@@ -205,7 +227,7 @@ function rebeta!(beta, counts, pops)
                     if k == j
                         beta_sub[j,j] = rand(i_f)
                     elseif k>j && beta_sub[k,j] != 0
-                        beta_sub[k,j] = beta_sub[j,k]  = rand(i_ff)
+                        beta_sub[k,j] = beta_sub[j,k]  = rand(i_ff) .* (1/n_aim) 
                     end
                 end
             end
@@ -230,9 +252,10 @@ function rebeta!(beta, counts, pops)
             beta[counts.cum_sum[i]+1:counts.cum_sum[i+1],counts.cum_sum[i]+1:counts.cum_sum[i+1]] = beta_sub
     end
     
-    return beta
+    input.Parameters.β = beta
     
 end
+
 
 function analyse_out(input, counts)
     
@@ -396,6 +419,66 @@ function save_output(output, data, path, name)
     
 end
 
+function summuary__stats(output, counts)
+    
+    classes, t_steps, n_ens = size(output) 
+    
+    
+    nft = Array{Int64}(undef, n_ens, 2)
+    
+    for i in 1:n_ens
+        
+        sol = output[i]
+        
+        data = reduce(vcat,transpose.(sol.u))
+
+        if any(x->x==-1, data) == true
+            println("Need to Reduce Timestep")
+            
+            #break
+        end
+
+        s_d = data[:,1:5:end]
+        e_d = data[:,2:5:end]
+        i_d = data[:,3:5:end]
+        r_d = data[:,4:5:end]
+        c_d = data[:,5:5:end]
+
+        np = counts.pop
+
+        for j in 1:np #we only have 1 pop
+
+            #FERAL
+            
+            ll = counts.cum_sum[j]+1
+            uu = counts.cum_sum[j] + counts.feral[j]
+
+            #disease-free classes
+            s_j = s_d[:,ll:uu]
+            r_j = r_d[:,ll:uu]
+
+            final = s_j[end,:]+r_j[end,:]
+            na = count(x->x!=0,final)
+
+
+             #disease classes
+            e_j = e_d[:,ll:uu]
+            i_j = i_d[:,ll:uu]
+            c_j = c_d[:,ll:uu]
+
+            dis = e_j + i_j +c_j 
+            ndis = sum(dis,dims=1)
+            ne = count(x->x!=0,ndis)
+            
+            nft[i,1] = na
+            nft[i,2] = ne
+        end
+        
+    end
+    
+    return nft
+
+end
 function plot_network(input, output)
     connections = input.Parameters.β_b
     gg = Graphs.SimpleGraph(connections)

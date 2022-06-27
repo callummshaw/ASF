@@ -1,5 +1,5 @@
 Modules/*.ipynb
 Running/*.png
-Results/*
+Results/
 .ipynb_checkpoints
 *.gif
