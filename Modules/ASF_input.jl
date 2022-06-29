@@ -277,8 +277,7 @@ function read_inputs(path)
     -pops, data on n populations used in the model
     -seasonal, seaonal data on the n populations 
     =#
-    
-    Simulation = CSV.read(string(path,"Inputs/Simulation_Data.csv"), DataFrame; comment="#") #reading in simulation meta data
+    Simulation = CSV.read("$(path)Inputs/Simulation_Data.csv", DataFrame; comment="#") #reading in simulation meta data
     
     
     n_inf  = infected_populations(Simulation)
@@ -289,7 +288,7 @@ function read_inputs(path)
     #Seasons = [DataFrame() for _ in 1:Sim.N_Pop] seasons not currently in use
     
     for i in 1:Sim.N_Pop
-        pop_data = CSV.read(string(path,"Inputs/Population/Population_",i,".csv"), DataFrame; comment="#") 
+        pop_data = CSV.read("$(path)Inputs/Population/Population_$(i).csv", DataFrame; comment="#") 
         Pops[i] = Population_Data(pop_data)
         #Seasons[i] = CSV.read(string(path,"Seasonal/Seasonal_",i,".csv"), DataFrame; comment="#")
     end
@@ -334,13 +333,13 @@ function population_connection(counts)
      -connections, vector of vectors containing the populations each population is connected too
      =#
      println("-------------------------------------")
-     println(string(counts.pop," Populations!\nEnter connections for each population\n(for multiple seperate with space)"))
+     println("$(counts.pop) Populations!\nEnter connections for each population\n(for multiple seperate with space)")
      println("-------------------------------------")
          
      connections =  [Vector() for _ in 1:counts.pop]
      
      for i in 1:counts.pop
-         println(string("Population ", i , " Connects to:"))
+         println("Population $(i) Connects to:")
          nums = readline()
          numv =  parse.(Int, split(nums, " "))
          connections[i] = numv
@@ -537,7 +536,7 @@ function combine_beta!(beta_p, beta_d, counts)
                     push!(links, sort([i,j])) #storing the link
 
                     println("-------------------------------------")
-                    println(string("Strength of Population ", i, " to Population ", j, " Transmission:"))
+                    println("Strength of Population  $(i) to Population  $(j) Transmission:")
                     str = readline()
                     str = parse(Float64, str) 
 
