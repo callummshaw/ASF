@@ -17,7 +17,7 @@ Inter_feral,0.035,0.002
 #Farm - feral transmission
 Farm_Feral,0.01,0
 #Death Probability
-Death,0.95,0.01
+Death,0.8,0.01
 #Recovery Rate
 Recovery,0.143,0.02
 #Latent Rate
@@ -37,6 +37,6 @@ Exp_p,3,0
 #Infected population size in seeded populations
 Inf_p,2,0
 #Natural Birth Rate
-Birth_N,0.00665,0
+Birth_N,0.00665,0.0002
 #Natural Death Rate
-Death_N,0.00535,0
+Death_N,0.00535,0.0002

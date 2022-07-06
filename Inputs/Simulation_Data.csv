@@ -1,7 +1,7 @@
 #File for all population related parameters for simulation
 Name,Value
 #Number of years to simulate
-Years,1
+Years,3
 #Run in an ensemble? if unwanted set to 1
 N_ensemble,100
 #Param values from means or distribution

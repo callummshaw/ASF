@@ -250,10 +250,9 @@ function quick_analysis(output)
         
         data = reduce(vcat,transpose.(sol.u))
 
-        if any(x->x==-1, data) == true
+        if any(x->x <0, data)
             println("Need to Reduce Timestep")
-            
-            #break
+            data[data .< 0 ] .= 0
         end
 
         s_d = data[:,1:5:end]
@@ -266,19 +265,19 @@ function quick_analysis(output)
         disease_free = s_d + r_d
         
         free_end = disease_free[end,:]    
-        n_alive = count(x->x!=0, free_end)
+        n_alive = count(x->x>0, free_end)
         nft[i,1] = n_alive
 
         
         disease_sum = sum(disease,dims=1)
-        n_exposed = count(x->x!=0,disease_sum)
+        n_exposed = count(x->x>0,disease_sum)
         nft[i,2] = n_exposed
         
         tt = sum(disease, dims = 2)
         e_times = findall(==(0), tt)
 
         if isempty(e_times)
-            nft[i,3] = 999
+            nft[i,3] = 9999
         else
             nft[i,3] = sol.t[minimum(e_times)[1]]
         end
