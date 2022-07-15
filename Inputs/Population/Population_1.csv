@@ -40,3 +40,5 @@ Inf_p,2,0
 Birth_N,0.00665,0.0002
 #Natural Death Rate
 Death_N,0.00535,0.0002
+#Immunity waning rate
+Immunity,0.00893,0.0006

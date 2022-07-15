@@ -60,7 +60,8 @@ struct Population_Data <: Data_Input
     N_i::Vector{Float64} #number of infected in seeded
     Birth::Vector{Float64} #birth rate
     Death_n::Vector{Float64} #natural death rate
-    
+    Immunity::Vector{Float64}
+
     function Population_Data(input)
         
         Den = [input.Mean[1],input.STD[1]]
@@ -83,8 +84,9 @@ struct Population_Data <: Data_Input
         Npi = [input.Mean[18],input.STD[18]]
         B = [input.Mean[19],input.STD[19]]
         Dn = [input.Mean[20],input.STD[20]]
+        Im = [input.Mean[21],input.STD[21]]
         
-        new(Den, Nf, Nl, Ni ,Bf, Bl, Bff, Bfl, D, R, L, C, Dl, Df, Npf, Npl, Npe, Npi, B, Dn)
+        new(Den, Nf, Nl, Ni ,Bf, Bl, Bff, Bfl, D, R, L, C, Dl, Df, Npf, Npl, Npe, Npi, B, Dn, Im)
         
     end
     
@@ -134,7 +136,9 @@ mutable struct Model_Parameters
     ω::Vector{Float64} #corpse infection modifier
     ρ::Vector{Float64} #death probability
     λ::Vector{Float64} #corpse decay rate
-    
+    κ::Vector{Float64} #loss of immunity rate
+
+
     Populations::Population_Breakdown #breakdown of population
     
     function Model_Parameters(sim, pops, U0, Populations)
@@ -142,9 +146,9 @@ mutable struct Model_Parameters
         β, β_density = population_beta(sim, pops, Populations)
         β_connections = migration_births(β, Populations)
         
-        μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ = parameter_build(sim, pops, U0, Populations)
+        μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ, κ = parameter_build(sim, pops, U0, Populations)
         
-        new(β, β_connections, β_density, μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ, Populations)
+        new(β, β_connections, β_density, μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ, κ, Populations)
     end
     
 end
@@ -189,7 +193,8 @@ function parameter_build(sim, pops, init_pops, counts)
     ω = [] #corpse infection modifier
     ρ = [] #ASF mortality
     λ = [] #corpse decay rate
-    
+    κ = []
+
     for i in 1:counts.pop
         data =  pops[i]
         
@@ -227,22 +232,25 @@ function parameter_build(sim, pops, init_pops, counts)
             append!(λ,λ_fr)
             append!(λ,λ_lr)
 
-            
+            κ_r = repeat([data.Immunity[1]],nt)
+            append!(κ,κ_r)
         else #running of distros
             
-            ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2],0,5) #latent dist
-            γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2],0,5) #r/d rate dist
-            μ_b_d = TruncatedNormal(data.Birth[1], data.Birth[2],0,1) #birth dist
-            μ_d_d = TruncatedNormal(data.Death_n[1], data.Death_n[2],0,1) #n death dist
-            ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2],0,1) #corpse inf dist
-            ρ_d = TruncatedNormal(data.Death[1], data.Death[2],0,1) #mortality dist
-            λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2],0,1) #corpse decay feral dist
-            λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2],0,5) #corpse decay farm dist
+            ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 5) #latent dist
+            γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 5) #r/d rate dist
+            μ_b_d = TruncatedNormal(data.Birth[1], data.Birth[2], 0, 1) #birth dist
+            μ_d_d = TruncatedNormal(data.Death_n[1], data.Death_n[2], 0, 1) #n death dist
+            ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2], 0, 1) #corpse inf dist
+            ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
+            λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 1) #corpse decay feral dist
+            λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2], 0, 5) #corpse decay farm dist
+            κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 1)
 
             append!(ζ,rand(ζ_d,nt))
             append!(γ,rand(γ_d,nt))
             append!(ω,rand(ω_d,nt))
             append!(ρ,rand(ρ_d,nt))
+            append!(κ,rand(κ_d,nt))
 
             μ_b_r = rand(μ_b_d,nt)
             μ_d_r = rand(μ_d_d,nt)
@@ -260,7 +268,7 @@ function parameter_build(sim, pops, init_pops, counts)
         
     end
 
-    return  μ_b, μ_d, μ_g, ζ, γ, ω, ρ, λ
+    return  μ_b, μ_d, μ_g, ζ, γ, ω, ρ, λ, κ
     
 end
 
