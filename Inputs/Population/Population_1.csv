@@ -18,16 +18,16 @@ Inter_feral,0.035,0.002
 Farm_Feral,0.01,0
 #Death Probability
 Death,0.8,0.01
-#Recovery Rate
-Recovery,0.143,0.02
+#Recovery period (days)
+Recovery,7,1
 #Latent Rate
-Latent,0.143,0.02
+Latent,7,1
 #Corpse infection modifier
-Corpse,0.5,0
+Corpse,0.8,0
 #Corpse decay rate farm
 Decay_farm,1,0
 #Corpse decay rate feral
-Decay_feral,0.143,0.01
+Decay_feral,28,1
 #Feral population size
 Feral_p,12,2
 #Farm population size
@@ -41,4 +41,4 @@ Birth_N,0.00665,0.0002
 #Natural Death Rate
 Death_N,0.00535,0.0002
 #Immunity waning rate
-Immunity,0.00893,0.0006
+Immunity,168,7

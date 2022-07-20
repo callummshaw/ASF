@@ -73,18 +73,18 @@ struct Population_Data <: Data_Input
         Bff = [input.Mean[7],input.STD[7]]
         Bfl = [input.Mean[8],input.STD[8]]
         D = [input.Mean[9],input.STD[9]]
-        R = [input.Mean[10],input.STD[10]]
-        L = [input.Mean[11],input.STD[11]]
+        R = day_to_rate(input.Mean[10],input.STD[10])
+        L = day_to_rate(input.Mean[11],input.STD[11])
         C = [input.Mean[12],input.STD[12]]
-        Dl = [input.Mean[13],input.STD[13]]
-        Df = [input.Mean[14],input.STD[14]]
+        Dl = day_to_rate(input.Mean[13],input.STD[13])
+        Df = day_to_rate(input.Mean[14],input.STD[14])
         Npf = [input.Mean[15],input.STD[15]]
         Npl = [input.Mean[16],input.STD[16]]
         Npe = [input.Mean[17],input.STD[17]]
         Npi = [input.Mean[18],input.STD[18]]
         B = [input.Mean[19],input.STD[19]]
         Dn = [input.Mean[20],input.STD[20]]
-        Im = [input.Mean[21],input.STD[21]]
+        Im = day_to_rate(input.Mean[21],input.STD[21])
         
         new(Den, Nf, Nl, Ni ,Bf, Bl, Bff, Bfl, D, R, L, C, Dl, Df, Npf, Npl, Npe, Npi, B, Dn, Im)
         
@@ -174,6 +174,13 @@ struct Model_Data
         
     end
     
+end
+
+function day_to_rate(Mean, STD)
+    mean_rate = 1/Mean
+    std_rate = 1/Mean - 1/(Mean+STD)
+
+    return [mean_rate, std_rate]
 end
 
 function parameter_build(sim, pops, init_pops, counts)

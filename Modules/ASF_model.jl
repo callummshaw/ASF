@@ -43,7 +43,11 @@ function density_rate(out,u,p,t)
     populations  = hcat([column(i) for i=1:tp]...)
     populations[diagind(populations)] = N;
     
-    Births = p.μ_b .* Np #+ 0.001*(p.μ_b .* (p.β_b * Np))
+    w_births = 0.85
+    o_births = (1.0 - w_births) / mean(sum(p.β_b,dims=2) .-1)
+
+
+    Births = w_births*p.μ_b .* Np + o_births.*(p.μ_b .* (p.β_b * Np))
     Infect = ((beta .* S) ./ populations) * (I + p.ω .* C)#ASF Infections
     Infectous = p.ζ .* E
     Recover = p.γ .* (1 .- p.ρ) .* I #ASF Recoveries
@@ -95,7 +99,8 @@ function frequency_rate(out,u,p,t)
         ncs = Pops.cum_sum[i] #cumsum of farm and ferals over all regions
 
         N_feral = sum(N[ncs+1:ncs+nf]) #total feral population in region i
-        beta[p.β_d .== j] *= reference_density
+        Density = N_feral/Pops.area[i]
+        beta[p.β_d .== j] .*= Density
 
     end
 
@@ -103,7 +108,7 @@ function frequency_rate(out,u,p,t)
     populations  = hcat([column(i) for i=1:tp]...)
     populations[diagind(populations)] = N;
     
-    Births = p.μ_b.*Np #+ 0.001*(p.μ_b .* (p.β_b * Np))
+    Births = p.μ_b.*Np #+ 1*(p.μ_b .* (p.β_b * Np))
     Infect = ((beta .* S) ./ populations) * (I + p.ω .* C)#ASF Infections
     Infectous = p.ζ .* E
     Recover = p.γ .* (1 .- p.ρ) .* I #ASF Recoveries
