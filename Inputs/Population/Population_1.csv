@@ -1,7 +1,7 @@
 #File containing infomation on distributions for model params assumes gaussian distribution
 Name,Mean,STD
 #Density
-Density,3,0
+Density,2.95,0
 #Number of feral groups
 N_feral,100,0
 #Number of farms
@@ -23,11 +23,11 @@ Recovery,7,1
 #Latent Rate
 Latent,7,1
 #Corpse infection modifier
-Corpse,0.8,0
+Corpse,0.5,0
 #Corpse decay rate farm
 Decay_farm,1,0
 #Corpse decay rate feral
-Decay_feral,28,1
+Decay_feral,7,1
 #Feral population size
 Feral_p,12,2
 #Farm population size

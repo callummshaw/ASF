@@ -277,7 +277,7 @@ function quick_analysis(output)
         e_times = findall(==(0), tt)
 
         if isempty(e_times)
-            nft[i,3] = 9999
+            nft[i,3] = 99999
         else
             nft[i,3] = sol.t[minimum(e_times)[1]]
         end
