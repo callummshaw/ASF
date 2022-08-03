@@ -262,6 +262,8 @@ function parameter_build(sim, pops, init_pops, counts)
             μ_b_r = rand(μ_b_d,nt)
             μ_d_r = rand(μ_d_d,nt)
             
+            #μ_d_r[μ_d_r.>μ_b_r] = μ_b_r[μ_d_r.>μ_b_r]
+            
             append!(μ_b, μ_b_r)
             append!(μ_d, μ_d_r) 
             
@@ -641,9 +643,9 @@ function intial_group_pops(sim, pops)
         
         y0 = zeros(N_class*N_total)
         
-        group_feral_pops = Normal(data.N_f[1],data.N_f[2]) #dist for number of pigs in selected feral group
+        group_feral_pops = TruncatedNormal(data.N_f[1],data.N_f[2],3,50) #dist for number of pigs in selected feral group
         pop_groups = round.(Int,rand(group_feral_pops, N_feral)) #drawing the populations of each feral group in population
-        
+        #println(pop_groups)
         #now seededing ASF in feral populations
         
         if i in p_i #population that have ASF in a group
@@ -663,8 +665,7 @@ function intial_group_pops(sim, pops)
                     t_i = round(Int,rand(d_i)) #number of infected in group
                     
                     t_pop = pop_groups[k]
-                    
-                    y0[l] = max(0,t_pop-t_e-t_i)
+                    y0[l] = max(1,t_pop-t_e-t_i)
                     y0[l+1] = t_e
                     y0[l+2] = t_i
                     
@@ -697,7 +698,6 @@ function intial_group_pops(sim, pops)
     end
     
     counts = Population_Breakdown(feral_count,farm_count, densities, areas, sim.N_Inf)
-
     return trunc.(Int,y_total), counts
 
     
