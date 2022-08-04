@@ -149,15 +149,21 @@ function save_raw_output(output, data, path, name)
         classes, t_steps = size(output)
         n_ens = 1
     end
-    
+   
+    input_folder = splitpath(path)[end]
+    base_path = rsplit(path, input_folder)[1]
+
     #making save directory
-    dir = "$(path)Results/$(name)"
-    
+    dir = "$(base_path)Results/$(name)"
+
+    println(dir)
+    println(base_path)
+
     isdir(dir) || mkdir(dir)
     cd(dir)
 
     #copying inputs
-    cp("$(path)Inputs", "Inputs",force = true)
+    cp("$(path)", "Inputs",force = true)
     
     #saving run parameters
     save_object("parameters.jdl2", data)
@@ -261,28 +267,34 @@ function quick_analysis(output)
         r_d = data[:,4:5:end]
         c_d = data[:,5:5:end]
 
-        disease = e_d + i_d + c_d
-        disease_free = s_d + r_d
+        disease = e_d + i_d + c_d #classes with disease
+        disease_free = s_d + r_d #classes without disease
         
-        free_end = disease_free[end,:]    
-        n_alive = count(x->x>0, free_end)
-        nft[i,1] = n_alive
-
-        
+        #number of groups exposed
         disease_sum = sum(disease,dims=1)
         n_exposed = count(x->x>0,disease_sum)
         nft[i,2] = n_exposed
-        
+
+        #we need to find the stats at timf of ASF die-out
         tt = sum(disease, dims = 2)
         e_times = findall(==(0), tt)
-
-        if isempty(e_times)
-            nft[i,3] = 99999
-        else
-            nft[i,3] = sol.t[minimum(e_times)[1]]
-        end
-            
         
+        if isempty(e_times)
+            nft[i,3] = -1 #no die out, present at end
+        else
+            nft[i,3] = sol.t[minimum(e_times)[1]] #dieout!
+        end
+
+        if nft[i,3] == -1 #will take stats at end
+            free_end = disease_free[end,:]    
+            n_alive = count(x->x>0, free_end)
+            nft[i,1] = n_alive
+        else #want number alive at time of dieout
+            free_end = disease_free[minimum(e_times)[1],:]
+            n_alive = count(x->x>0, free_end)
+            nft[i,1] = n_alive
+        end
+    
     end
     
     return nft

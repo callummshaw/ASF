@@ -294,7 +294,8 @@ function read_inputs(path)
     -pops, data on n populations used in the model
     -seasonal, seaonal data on the n populations 
     =#
-    Simulation = CSV.read("$(path)Inputs/Simulation_Data.csv", DataFrame; comment="#") #reading in simulation meta data
+
+    Simulation = CSV.read("$(path)/Simulation_Data.csv", DataFrame; comment="#") #reading in simulation meta data
     
     
     n_inf  = infected_populations(Simulation)
@@ -305,7 +306,7 @@ function read_inputs(path)
     #Seasons = [DataFrame() for _ in 1:Sim.N_Pop] seasons not currently in use
     
     for i in 1:Sim.N_Pop
-        pop_data = CSV.read("$(path)Inputs/Population/Population_$(i).csv", DataFrame; comment="#") 
+        pop_data = CSV.read("$(path)/Population/Population_$(i).csv", DataFrame; comment="#") 
         Pops[i] = Population_Data(pop_data)
         #Seasons[i] = CSV.read(string(path,"Seasonal/Seasonal_",i,".csv"), DataFrame; comment="#")
     end
