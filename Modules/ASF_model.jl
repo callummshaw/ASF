@@ -43,7 +43,7 @@ function density_rate(out,u,p,t)
     populations  = hcat([column(i) for i=1:tp]...)
     populations[diagind(populations)] = N;
     
-    w_births = 0.85
+    w_births = 0.8
     o_births = (1.0 - w_births) / mean(sum(p.β_b,dims=2) .-1)
 
 

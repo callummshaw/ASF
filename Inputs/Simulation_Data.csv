@@ -7,6 +7,6 @@ N_ensemble,100
 #Param values from means or distribution
 Identical,false
 #Number of Populations
-N_Pop,1
+N_Pop,3
 #Number of Populations seeded with asf (will seed into a single group within population)
 N_Inf,1

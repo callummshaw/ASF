@@ -242,25 +242,26 @@ function plot_network(input, output)
     
 end
 
-function quick_analysis(output)
+function quick_analysis(output, input)
     #=
     Gives die out time, number of groups alive, and number of groups exposed for 1 population run in ensemble
     =#
     classes, t_steps, n_ens = size(output) 
-    
-    nft = Array{Int64}(undef, n_ens, 3)
+    pops = input.Parameters.Populations.pop
+    cs = input.Parameters.Populations.cum_sum
+    inf = input.Parameters.Populations.inf
+    nft = Array{Int64}(undef, n_ens, 4*pops)
     
     for i in 1:n_ens
-        
         sol = output[i]
-        
+
         data = reduce(vcat,transpose.(sol.u))
 
         if any(x->x <0, data)
             println("Need to Reduce Timestep")
             data[data .< 0 ] .= 0
         end
-
+        
         s_d = data[:,1:5:end]
         e_d = data[:,2:5:end]
         i_d = data[:,3:5:end]
@@ -270,31 +271,67 @@ function quick_analysis(output)
         disease = e_d + i_d + c_d #classes with disease
         disease_free = s_d + r_d #classes without disease
         
-        #number of groups exposed
-        disease_sum = sum(disease,dims=1)
-        n_exposed = count(x->x>0,disease_sum)
-        nft[i,2] = n_exposed
+        for j in 1:pops
+            
 
-        #we need to find the stats at timf of ASF die-out
-        tt = sum(disease, dims = 2)
-        e_times = findall(==(0), tt)
-        
-        if isempty(e_times)
-            nft[i,3] = -1 #no die out, present at end
-        else
-            nft[i,3] = sol.t[minimum(e_times)[1]] #dieout!
-        end
+            disease_pop = disease[:,cs[j]+1:cs[j+1]]
+            disease_free_pop = disease_free[:,cs[j]+1:cs[j+1]]
 
-        if nft[i,3] == -1 #will take stats at end
-            free_end = disease_free[end,:]    
-            n_alive = count(x->x>0, free_end)
-            nft[i,1] = n_alive
-        else #want number alive at time of dieout
-            free_end = disease_free[minimum(e_times)[1],:]
-            n_alive = count(x->x>0, free_end)
-            nft[i,1] = n_alive
-        end
+            #number of groups exposed
+            disease_sum = sum(disease_pop,dims=1)
+            n_exposed = count(x->x>0,disease_sum)
+            nft[i,4*(j-1)+2] = n_exposed
+
+            #we need to find the stats at timf of ASF die-out
+            tt = sum(disease_pop, dims = 2)
+            
+            if j == inf[1] #population seeded with ASF
+                enter = 0 #as seeded
+                
+                d_times = findall(!=(0), tt)
+                
+                if isempty(d_times) #no die out
+                    dieout = -1 
+                else #ASF died out
+                    dieout = maximum(d_times)[1]+1
+                end
+            else #population not seeded
+               
+                e_times = findall(!=(0), tt)
+                
+                if isempty(e_times) #no ASF in population
+                    enter = -2
+                    dieout = -2
+                else #ASF died out
+                    enter = minimum(e_times)[1]
+                    tt_post = tt[enter:end]
+                    
+                    d_times = findall(!=(0), tt_post)
+                    dieout = maximum(d_times)[1]+1
+                end
+                
+                
+            end
+            
+            nft[i,4*(j-1)+3] = enter
+            nft[i,4*(j-1)+4] = dieout
+                
+                
+                
+                
+            #now want to compute number alive
+            if dieout < 0 #will take stats at end as no ASF or ASF still endemic
+                free_end = disease_free_pop[end,:]    
+                n_alive = count(x->x>0, free_end)
+                nft[i,4*(j-1)+1] = n_alive
+                
+            else #want number alive at time of dieout
+                free_end = disease_free_pop[dieout,:]
+                n_alive = count(x->x>0, free_end)
+                nft[i,4*(j-1)+1] = n_alive
+            end
     
+        end
     end
     
     return nft
