@@ -10,3 +10,7 @@ Identical,false
 N_Pop,3
 #Number of Populations seeded with asf (will seed into a single group within population)
 N_Inf,1
+#Connection Type- for 2+ groups can have automatic connections between populations- line (l), circular (c), total (t), or off (o)
+C_Type,c
+#Connection Strength- for inbuilt sims, this is the connection strength between populations
+C_Str,0.1

@@ -21,20 +21,23 @@ struct Meta_Data <: Data_Input
     using distros or just mean values for parameters, the number of 
     populations and the number of said populations seeded with ASF
     =#
-    years::Float64
-    N_ensemble::Int64
-    Identical::Bool
-    N_Pop::Int64
-    N_Inf::Vector{Int64}
-    
+    years::Float64 #years simulation will run for
+    N_ensemble::Int64 #number of runs in an ensemble
+    Identical::Bool #if we params to be drawn from dist or just means of dist
+    N_Pop::Int64 #number of populations, must match the number of population files in input
+    N_Inf::Vector{Int64} #number of populations init with ASF
+    C_Type::String #what kind of connection we want to init with between populations, line (l), circular (c), total (t), or off (o)
+    C_Str::Float64 #strength of the connections between populations, note this is only for l,c,t
+
     function Meta_Data(input, numv)
         Ny = parse(Int64, input.Value[1])
         Ne = parse(Float64,input.Value[2])
         I = (input.Value[3] == "true")
         Np = parse(Int64, input.Value[4])
         Ni = numv
-        
-        new(Ny,Ne,I,Np,Ni)
+        Ct = input.Value[6]
+        Cs = parse(Float64, input.Value[7])
+        new(Ny,Ne,I,Np,Ni,Ct,Cs)
     end
 end
 
@@ -161,7 +164,9 @@ struct Model_Data
     U0::Vector{Int64} #Initial Population
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
+
     function Model_Data(Path)
+
         sim, pops = read_inputs(Path)
         
         Time = (0.0,sim.years[1]*365)
@@ -297,8 +302,7 @@ function read_inputs(path)
 
     Simulation = CSV.read("$(path)/Simulation_Data.csv", DataFrame; comment="#") #reading in simulation meta data
     
-    
-    n_inf  = infected_populations(Simulation)
+    n_inf  = infected_populations(Simulation) #what population is seeded with ASF
         
     Sim = Meta_Data(Simulation,n_inf)
     
@@ -339,50 +343,102 @@ function migration_births(β, counts)
     return βb
 end
 
-function population_connection(counts)
+function population_connection(counts, sim)
     #=
      Function to build the the connections between the populations
      Could put in some error checking to make sure the entered populations are reasonable
      
      Inputs:
      - counts, vector of the amount of farms and feral groups in each population
-     
+     - sim, overall params will use to see if we need custom connections or not
      Outputs:
      -connections, vector of vectors containing the populations each population is connected too
      =#
-     println("-------------------------------------")
-     println("$(counts.pop) Populations!\nEnter connections for each population\n(for multiple seperate with space)")
-     println("-------------------------------------")
-         
-     connections =  [Vector() for _ in 1:counts.pop]
-     
-     for i in 1:counts.pop
-         println("Population $(i) Connects to:")
-         nums = readline()
-         numv =  parse.(Int, split(nums, " "))
-         connections[i] = numv
-     end
-     
-     return connections
+
+    if (sim.C_Type == "o") & (counts.pop > 2) #custom input
+
+        println("-------------------------------------")
+        println("$(counts.pop) Populations!\nEnter connections for each population\n(for multiple seperate with space)")
+        println("-------------------------------------")
+            
+        connections = Vector{Vector{Int}}(undef, counts.pop)
+
+        for i in 1:counts.pop
+            println("Population $(i) Connects to:")
+            nums = readline()
+            numv =  parse.(Int, split(nums, " "))
+            connections[i] = numv
+        end
+    else #will have pre_loaded connections
+        connections  = premade_connections(sim.C_Type, counts.pop)
+    end    
+    
+    return connections
 end
 
+function premade_connections(type_c, Ni)
+    
+    #three different connection types, c-circular, l-line, t-total, will defualt to line 
+    connections = Vector{Vector{Int}}(undef, Ni)
+    
+    if Ni == 2 #if only 2 populations have to be connected
+        
+        connections[1] = [2]
+        connections[2] = [1]
+        
+    elseif type_c == "c" #circular connection
+        
+        for i in 1:Ni
+            
+            if i == 1
+                connections[i] = [i+1, Ni]
+            elseif i != Ni
+                 connections[i] = [i-1,i+1]
+            else
+                connections[i] = [1, i-1]
+            end
+        end
+     
+    elseif type_c == "t" #every population connects to another
+        
+        for i in 1:Ni
+            
+            co = Vector(1:Ni)
+            filter!(e->e≠i,co)
+            connections[i] = co
+            
+        end
+    else #line
+        for i in 1:Ni
+            if i == 1
+                connections[i] = [i+1]
+            elseif i != Ni
+                connections[i] = [i-1,i+1]
+            else
+                connections[i] = [i-1]
+            end
+        end
+    end
+    
+    return connections 
+end
 
 function infected_populations(input)
-    
-    Ni = parse(Int64, input.Value[4])
+    number_pops  = parse(Int64, input.Value[4]) #number of populations 
+    number_seeded = parse(Int64, input.Value[5]) #number of populations seeded with ASF
+    con_type = input.Value[6]
 
-    if Ni == 1
-        #println("-------------------------------------")
-        #println("Single Population!\nThe Only Population is Seeded With ASF!")
-        #println("-------------------------------------") 
-        numv = [1]
-    else
+    if (con_type == "o") & (number_pops > 1) #for runs with 2+ populations can choose what population we seed if custom
         println("-------------------------------------")
-        println(string(Ni," Populations!\nEnter Populations Seeded With ASF! \n(for multiple seperate with space)"))
+        println(string(number_pops," Populations!\nEnter Populations Seeded With ASF! \n(for multiple seperate with space)"))
         println("-------------------------------------") 
         nums = readline()
         numv =  parse.(Int, split(nums, " "))
-        
+    elseif (number_pops > 1) & (number_seeded > 1)  #if multiple populations and multiple seeded will randomly assigned seeded pops
+        s_pops = shuffle!(MersenneTwister(1234), Vector(1:number_pops))
+        numv = s_pops[1:number_seeded]
+    else #1 seeded population
+        numv = [1]
     end
     
     return numv
@@ -517,7 +573,7 @@ function population_beta(sim, pops, counts)
     
 
     if N_pops > 1
-        beta,beta_density = combine_beta!(beta_p,beta_dens,counts)
+        beta,beta_density = combine_beta!(beta_p,beta_dens,counts,sim)
     else
         beta = beta_p[1]
         beta_density = beta_dens[1]
@@ -528,9 +584,10 @@ function population_beta(sim, pops, counts)
 end
 
 
-function combine_beta!(beta_p, beta_d, counts)
-    
-    connections = population_connection(counts)
+function combine_beta!(beta_p, beta_d, counts, sim)
+    #function that puts the connections between the populations
+
+    connections = population_connection(counts,sim) #calls to find connections
     
     cs_g = counts.cum_sum
   
@@ -540,10 +597,9 @@ function combine_beta!(beta_p, beta_d, counts)
     
     links = []
     
-        for i in 1:counts.pop
+        for i in 1:counts.pop #looping through populations
 
-            linked_pops = connections[i]
-            beta[cs_g[i]+1:cs_g[i+1],cs_g[i]+1:cs_g[i+1]] = beta_p[i]
+            beta[cs_g[i]+1:cs_g[i+1],cs_g[i]+1:cs_g[i+1]] = beta_p[i] 
             beta_density[cs_g[i]+1:cs_g[i+1],cs_g[i]+1:cs_g[i+1]] = beta_d[i]
             for j in connections[i]
                 
@@ -552,12 +608,15 @@ function combine_beta!(beta_p, beta_d, counts)
                 if new_link ∉ links
                     #println(new_link)
                     push!(links, sort([i,j])) #storing the link
-
-                    println("-------------------------------------")
-                    println("Strength of Population  $(i) to Population  $(j) Transmission:")
-                    str = readline()
-                    str = parse(Float64, str) 
-
+                    
+                    if sim.C_Type == "o" #custom strengths
+                        println("-------------------------------------")
+                        println("Strength of Population  $(i) to Population  $(j) Transmission:")
+                        str = readline()
+                        str = parse(Float64, str)
+                    else #pre-determined strength
+                        str = sim.C_Str
+                    end
                     #the chosen population
                     ll = cs_g[i] + 1
                     ul = cs_g[i] + counts.feral[i]

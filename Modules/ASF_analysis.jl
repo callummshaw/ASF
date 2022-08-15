@@ -307,7 +307,11 @@ function quick_analysis(output, input)
                     tt_post = tt[enter:end]
                     
                     d_times = findall(!=(0), tt_post)
-                    dieout = maximum(d_times)[1]+1
+                    if isempty(d_times) #no die out
+                        dieout = -1 
+                    else #ASF died out
+                        dieout = maximum(d_times)[1]+1
+                    end
                 end
                 
                 

@@ -44,7 +44,7 @@ function density_rate(out,u,p,t)
     populations[diagind(populations)] = N;
     
     w_births = 0.8
-    o_births = (1.0 - w_births) / mean(sum(p.β_b,dims=2) .-1)
+    o_births = (1.0 - w_births) / mean(sum(p.β_b,dims=2) .- 1)
 
 
     Births = w_births*p.μ_b .* Np + o_births.*(p.μ_b .* (p.β_b * Np))
