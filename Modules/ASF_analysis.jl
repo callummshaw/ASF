@@ -246,11 +246,14 @@ function quick_analysis(output, input)
     #=
     Gives die out time, number of groups alive, and number of groups exposed for 1 population run in ensemble
     =#
+    stats = 4
+    
     classes, t_steps, n_ens = size(output) 
     pops = input.Parameters.Populations.pop
     cs = input.Parameters.Populations.cum_sum
     inf = input.Parameters.Populations.inf
-    nft = Array{Int64}(undef, n_ens, 4*pops)
+    nft = Array{Int64}(undef, n_ens, stats*pops)
+    times = output[1].t
     
     for i in 1:n_ens
         sol = output[i]
@@ -280,59 +283,69 @@ function quick_analysis(output, input)
             #number of groups exposed
             disease_sum = sum(disease_pop,dims=1)
             n_exposed = count(x->x>0,disease_sum)
-            nft[i,4*(j-1)+2] = n_exposed
+            nft[i,stats*(j-1)+2] = n_exposed
 
             #we need to find the stats at timf of ASF die-out
             tt = sum(disease_pop, dims = 2)
+            d_times = findall(!=(0), tt)
             
             if j == inf[1] #population seeded with ASF
+                
                 enter = 0 #as seeded
+                nft[i,stats*(j-1)+3] = enter
                 
-                d_times = findall(!=(0), tt)
-                
-                if isempty(d_times) #no die out
-                    dieout = -1 
+                if tt[end] != 0 #no die out
+                    
+                    dieout = -1
+                    nft[i,stats*(j-1)+4] = dieout
+                    
                 else #ASF died out
-                    dieout = maximum(d_times)[1]+1
+                    
+                    dieout = maximum(d_times)[1]
+                    nft[i,stats*(j-1)+4] = times[dieout]
+                    
                 end
             else #population not seeded
-               
-                e_times = findall(!=(0), tt)
                 
-                if isempty(e_times) #no ASF in population
+                if isempty(d_times) #no ASF in population
+                    
                     enter = -2
                     dieout = -2
-                else #ASF died out
-                    enter = minimum(e_times)[1]
-                    tt_post = tt[enter:end]
                     
-                    d_times = findall(!=(0), tt_post)
-                    if isempty(d_times) #no die out
-                        dieout = -1 
-                    else #ASF died out
-                        dieout = maximum(d_times)[1]+1
-                    end
+                    nft[i,stats*(j-1)+3] = enter
+                    nft[i,stats*(j-1)+4] = dieout
+                    
+                elseif tt[end] != 0 #ASF entered and did not die out
+                    
+                    enter = minimum(d_times)[1] #time ASF entered
+                    dieout = -1 
+                    
+                    nft[i,stats*(j-1)+3] = times[enter]
+                    nft[i,stats*(j-1)+4] = dieout
+                    
+                else #ASF entered and did die out!
+                    
+                    enter = minimum(d_times)[1]
+                    dieout = maximum(d_times)[1]
+                    
+                    nft[i,stats*(j-1)+3] = times[enter]
+                    nft[i,stats*(j-1)+4] = times[dieout]
+                    
                 end
                 
                 
             end
-            
-            nft[i,4*(j-1)+3] = enter
-            nft[i,4*(j-1)+4] = dieout
-                
-                
-                
-                
+          
             #now want to compute number alive
             if dieout < 0 #will take stats at end as no ASF or ASF still endemic
                 free_end = disease_free_pop[end,:]    
                 n_alive = count(x->x>0, free_end)
-                nft[i,4*(j-1)+1] = n_alive
+                nft[i,stats*(j-1)+1] = n_alive
                 
-            else #want number alive at time of dieout
+            else #want number alive at time of dieout 
                 free_end = disease_free_pop[dieout,:]
                 n_alive = count(x->x>0, free_end)
-                nft[i,4*(j-1)+1] = n_alive
+                nft[i,stats*(j-1)+1] = n_alive
             end
     
         end
