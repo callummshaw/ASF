@@ -31,7 +31,6 @@ function density_rate(out,u,p,t)
         j = i + 1 
 
         nf = Pops.feral[i] #number of feral groups in region
-        nt = Pops.total[i] #number of feral groups and farms in region
         ncs = Pops.cum_sum[i] #cumsum of farm and ferals over all regions
 
         N_feral = sum(N[ncs+1:ncs+nf]) #total feral population in region i

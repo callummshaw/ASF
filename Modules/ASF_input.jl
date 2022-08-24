@@ -8,7 +8,7 @@ using FileIO
 using LinearAlgebra
 using NPZ
 using Random, Distributions
-using LightGraphs
+using Graphs
 
 export Model_Data
 
@@ -95,31 +95,29 @@ struct Population_Data <: Data_Input
     
 end
 
-struct Population_Breakdown
+mutable struct Network_Data
     #=
-    Structure to store key data on each population
+    Structure to store key data on each population, internal just to keep track of a few params
     =#
-    feral::Vector{Int64}
-    farm::Vector{Int64}
+    feral::Vector{Int16}
+    farm::Vector{Int16}
+    pop::Int16
+    total::Vector{Int16}
+    cum_sum::Vector{Int16}
+    
+    inf::Vector{Int16}
     
     density::Vector{Float64}
     area::Vector{Float64}
 
-    
-    pop::Int64
-    total::Vector{Int64}
-    cum_sum::Vector{Int64}
-    
-    inf::Vector{Int64}
-    
-    function Population_Breakdown(feral,farm, density,area, numv)
+    function Network_Data(feral,farm, inf, density,area)
         n = size(feral)[1]
         t = feral + farm
         cs = pushfirst!(cumsum(t),0)
-        
-        new(feral,farm,density,area,n,t,cs,numv)
+        new(feral,farm,n,t,cs, inf, density, area)
     end
 end 
+
 
 mutable struct Model_Parameters
     #=
@@ -142,16 +140,14 @@ mutable struct Model_Parameters
     κ::Vector{Float64} #loss of immunity rate
 
 
-    Populations::Population_Breakdown #breakdown of population
+    Populations::Network_Data #breakdown of population
     
-    function Model_Parameters(sim, pops, U0, Populations)
+    function Model_Parameters(sim, pops, U0, Populations, network)
         
-        β, β_density = population_beta(sim, pops, Populations)
-        β_connections = migration_births(β, Populations)
-        
+        β, connected_pops, connected_births = beta_construction(sim, pops, Populations, network)
         μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ, κ = parameter_build(sim, pops, U0, Populations)
         
-        new(β, β_connections, β_density, μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ, κ, Populations)
+        new(β, connected_births, connected_pops, μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ, κ, Populations)
     end
     
 end
@@ -171,14 +167,153 @@ struct Model_Data
         
         Time = (0.0,sim.years[1]*365)
         
-        U0, counts = intial_group_pops(sim, pops) #initial populations
+        #now building feral pig network
+        network, counts = build_network(sim, pops) 
+
+        #Now using network to build init pops
+        U0 = build_populations(sim, pops, network, counts) #initial populations
         
-        Parameters = Model_Parameters(sim, pops, U0, counts)
+        Parameters = Model_Parameters(sim, pops, U0, counts, network)
         
         new(Time, U0, Parameters, pops)
         
     end
     
+end
+
+function build_network(sim, pops)
+    #This function builds the network
+    n_pops = sim.N_Pop #number of populations
+    network = Vector{Matrix{Int16}}(undef, n_pops) #vector to store all the 
+    feral_pops = Vector{Int16}(undef, n_pops)
+    farm_pops = Vector{Int16}(undef, n_pops)
+
+    for pop in 1:n_pops 
+        
+        data = pops[pop]
+
+        #Feral dist
+        if data.N_feral[1] == 0
+            nf = 0
+        else
+            nf_d = TruncatedNormal(data.N_feral[1],data.N_feral[2],0,1000) #number of feral group distribution
+            nf = trunc(Int64,rand(nf_d))
+        end
+       
+        #Farm dist     
+        if data.N_farm[1] == 0
+            nl = 0
+        else
+            nl_d = TruncatedNormal(data.N_farm[1],data.N_farm[2],0,100) #number of farms distribution
+            nl =  trunc(Int64,rand(nl_d))
+        end
+        
+        feral_pops[pop] = nf
+        farm_pops[pop] = nl
+
+        n_o = nf -1 #number of other feral groups; excluding "target group"
+
+        if data.N_int[1] > n_o
+           # @warn "Warning interconnectedness exceeds number of feral groups in population; average enterconnectedness set to total  number of feral groups - 1"
+            n_aim = n_o 
+        else
+            n_aim = data.N_int[1]
+        end
+
+        #using an erdos-renyi random network to determine inter-group interactions
+        p_c = n_aim / n_o #probability of a connection
+
+        if p_c == 1
+            feral = erdos_renyi(nf,sum(1:n_o)) #every group connected with every other
+        else
+            feral = erdos_renyi(nf,p_c) #not all groups are connected to every other
+        end
+
+        network_feral = Matrix(adjacency_matrix(feral))*200 #inter feral = 2
+        network_feral[diagind(network_feral)] .= 100 #intra feral = 1
+        if nl != 0  #there are farm populations 
+            
+            N = nf + nl
+            network_combined = zeros((N,N))
+            network_combined[1:nf,1:nf] = network_feral 
+           
+            #currently assumes 1 farm-group interaction term
+
+            for i in nf+1:N
+                feral_pop = rand(1:nf) # the feral population the farm can interact within
+                network_combined[i,i] = 400 #transmission within farm pop = 4
+
+                network_combined[i,feral_pop] = 300 #feral-farm = 3
+                network_combined[feral_pop, i] = 300 #feral-farm = 3
+
+            end
+        
+            network[pop] = network_combined
+
+        else #no farms in this population
+            network[pop] = network_feral
+        end
+        
+    end
+    counts = Network_Data(feral_pops,farm_pops, sim.N_Inf,[0.0],[0.0])
+    combined_network = combine_networks(network,sim,counts)
+    return combined_network, counts
+
+end
+
+function combine_networks(network,sim, counts)
+    #we have generated all the networks, but they need to be combined!
+    connections = population_connection(counts,sim) #calls to find connections
+
+    n_pops = counts.pop
+    n_cs = counts.cum_sum
+    N = n_cs[end]
+
+    meta_network = zeros(N,N)
+  
+    links = []
+    
+    for i in 1:n_pops #looping through populations
+
+        meta_network[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] = network[i]
+        
+        for j in connections[i]
+            
+            new_link = sort([i,j]) #checking if we have already linked the two populations
+
+            if new_link ∉ links
+                #println(new_link)
+                push!(links, sort([i,j])) #storing the link
+                
+                if sim.C_Type == "o" #custom strengths
+                    println("-------------------------------------")
+                    println("Strength of Population  $(i) to Population  $(j) Transmission:")
+                    str = readline()
+                    str = parse(Float64, str)
+                else #pre-determined strength
+                    str = sim.C_Str
+                end
+                #the chosen population
+                ll = n_cs[i] + 1
+                ul = n_cs[i] + counts.feral[i]
+                l_group = rand(ll:ul)
+
+                #populations the chosen population is linked too
+                ll_s = n_cs[j] + 1
+                ul_s = n_cs[j] + counts.feral[j]
+
+                s_group = rand(ll_s:ul_s)
+
+                meta_network[l_group,s_group] = str
+                meta_network[s_group,l_group] = str
+                
+            end
+
+        end
+    end
+
+    return meta_network
+
 end
 
 function day_to_rate(Mean, STD)
@@ -319,30 +454,6 @@ function read_inputs(path)
     
 end 
 
-function migration_births(β, counts)
-   #=
-    function for to find connected groups to determine births from other groups that migrate into said group
-    needed to help prevent stochastic group die-out
-    =#
-    
-    βb = β .!= 0 #matrix of all connected groups
-    βb[diagind(βb)] .= 0 #setting intra group value to 0,as meant to be births from other groups
-    
-    migration_modifier = 0.01 # X% external births vs internal births
-    
-    for j in 1:counts.pop #here to stop migratory births from connected groups in neighbouring populations
-        
-        ll = counts.cum_sum[j]+counts.feral[j] + 1
-        uu = counts.cum_sum[j+1]
-        
-        βb[:,ll:uu] .= 0
-        βb[ll:uu,:] .= 0
-            
-    end
-    
-    return βb
-end
-
 function population_connection(counts, sim)
     #=
      Function to build the the connections between the populations
@@ -445,205 +556,74 @@ function infected_populations(input)
 
 end 
 
-function population_beta(sim, pops, counts)
-    #=
-    function used to construct the transmission co-efficant matrix over all populations,
-    will build each population individaully then combine at end if need. 
-    =#
+function beta_construction(sim, pops, counts, network)
+    #this function is to convert the base network we have created into a transmission coefficant matrix
+
+    n_pops = counts.pop
+    n_cs = counts.cum_sum
+    beta = copy(network)
+    connected_births = copy(network)
     
-    N_pops = sim.N_Pop
-    
-    beta_p = Matrix{Float64}[]
-    beta_dens = Matrix{Float64}[]
-    
-    for x in 1:N_pops 
-        
-        data = pops[x]
-        
-        nf =  trunc(Int64,counts.feral[x]) #number of feral groups within pop
-        nl = trunc(Int64,counts.farm[x]) #number of farms within pop
-        
-        n_t = nf + nl
-        
-        n_o = nf -1 #number of other feral groups; excluding "target group"
+    connected_births[connected_births .!= 200] .= 0 #only wanted connected groups within same pop
+    connected_births =  connected_births .÷ 200 #setting to ones
+    connected_pops = copy(connected_births)
 
-        if data.N_int[1] > n_o
-           # @warn "Warning interconnectedness exceeds number of feral groups in population; average enterconnectedness set to total  number of feral groups - 1"
-            n_aim = n_o 
-        else
-            n_aim = data.N_int[1]
-        end
+    for i in 1:n_pops #iterating through
 
-        #using an erdos-renyi random network to determine inter-group interactions
-        p_c = n_aim / n_o #probability of a connection
+        data = pops[i]
 
-        if p_c == 1
-            beta_feral = erdos_renyi(nf,sum(1:n_o)) #every group connected with every other
-        else
-            beta_feral = erdos_renyi(nf,p_c) #not all groups are connected to every other
-        end
+        n_aim = data.N_int[1]
 
-        beta_m = Matrix(adjacency_matrix(beta_feral))
+        connected_pops[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] *= i
+
+
+        beta_pop = beta[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]]
         
-        beta_m = Float64.(beta_m) 
-        
-        beta_t = (x+1)*beta_m #used to keep track of density
-        #looking at feral
-        
-        #setting feral values
-        if sim.Identical == true #if no varition between groups in a pop
-
-            beta_m = beta_m * data.B_ff[1] .* (1/n_aim) #inter group
-            beta_m[diagind(beta_m)] .= data.B_f[1] #intra group
-
-        else #variaiton between inter-population groups
-
+        if sim.Identical #no variation, just mean of dist
+            beta_pop[beta_pop .== 100] .= data.B_f[1] #intra feral
+            beta_pop[beta_pop .== 200] .= data.B_ff[1] .* (1/n_aim) #inter feral
+            beta_pop[beta_pop .== 300] .= data.B_fl[1] #farm feral
+            beta_pop[beta_pop .== 400] .= data.B_l[1] #intra farm
+        else #from dist
             i_f = TruncatedNormal(data.B_f[1],data.B_f[2],0,5) #intra group
-            b_i_f = rand(i_f, nf) 
-            beta_m[diagind(beta_m)] = b_i_f
-            
             i_ff = TruncatedNormal(data.B_ff[1],data.B_ff[2],0,5) #inter group
-            
-            for i in 1:nf
-                for j in 1:nf
-                    if i>j && beta_m[i,j] != 0
-                        beta_m[i,j] = beta_m[j,i]  = rand(i_ff).* (1/n_aim) 
-                    end
-                end
-            end
 
-        end
-        
-        
+            n_intra = length(beta_pop[beta_pop .== 100])
+            n_inter = length(beta_pop[beta_pop .== 200])
 
-        #now loooking at farms
-        if nl != 0  #there are farm populations 
-            
-            N = nf + nl
-            beta = zeros((N,N))
-            beta_tt = zeros((N,N))
-            beta[1:nf,1:nf] = beta_m 
-            beta_tt[1:nf,1:nf] = beta_t
+            b_intra = rand(i_f, n_intra)
+            b_inter = rand(i_ff, n_inter) .* (1/n_aim)
 
-            #currently assumes 1 farm-group interaction term
+            beta_pop[beta_pop .== 100] = b_intra
+            beta_pop[beta_pop .== 200] = b_inter  
 
-            if sim.Identical == true #if no varition between groups in a pop
 
-                for i in nf+1:N
-
-                    feral_pop = rand(1:nf) # the feral population the farm can interact within
-                    beta[i,i] = data.B_l[1] #transmission within farm pop
-
-                    beta[i,feral_pop] = data.B_fl[1]
-                    beta[feral_pop, i] = data.B_fl[1]
-                    
-                    beta_tt[i,feral_pop] = 99
-                    beta_tt[feral_pop, i] = 99
-                end
-
-            else
-                
-                i_l = TruncatedNormal(data.B_l[1],data.B_l[2],0,5)
+            if counts.farm[i] > 0
                 i_fl = TruncatedNormal(data.B_fl[1],data.B_fl[2],0,5)
+                i_l = TruncatedNormal(data.B_l[1],data.B_l[2],0,5)
 
-                for i in nf+1:N
+                n_farm_feral = length(beta_pop[beta_pop .== 300])
+                n_farm = length(beta_pop[beta_pop .== 400])
 
-                    feral_pop = rand(1:nf) # the feral population the farm can interact within
-                    beta[i,i] = rand(i_l)#transmission within farm pop
+                b_farm_feral = rand(i_fl, n_farm_feral)
+                b_farm = rand(i_l, n_farm)
 
-                    b_i_fl = rand(i_fl)
-                    beta[i,feral_pop] = b_i_fl
-                    beta[feral_pop, i] = b_i_fl
-                    
-                    beta_tt[i,feral_pop] = 99
-                    beta_tt[feral_pop, i] = 99
-                end
+                beta_pop[beta_pop .== 300] = b_farm_feral
+                beta_pop[beta_pop .== 400] = b_farm
 
             end
-        
-        else #no farms in this population
-            beta = beta_m 
-            beta_tt = beta_t
-    
-        end
-        
-        push!(beta_p, beta)
-        push!(beta_dens, beta_tt)
-    end
-    
 
-    if N_pops > 1
-        beta,beta_density = combine_beta!(beta_p,beta_dens,counts,sim)
-    else
-        beta = beta_p[1]
-        beta_density = beta_dens[1]
+        end
+
+        beta[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] = beta_pop
+
     end
-    
-    return beta, beta_density
-    
+
+    return beta, connected_pops, connected_births
+
 end
 
-
-function combine_beta!(beta_p, beta_d, counts, sim)
-    #function that puts the connections between the populations
-
-    connections = population_connection(counts,sim) #calls to find connections
-    
-    cs_g = counts.cum_sum
-  
-    N = sum(counts.total)
-    beta = zeros(N,N)
-    beta_density  = zeros(N,N)
-    
-    links = []
-    
-        for i in 1:counts.pop #looping through populations
-
-            beta[cs_g[i]+1:cs_g[i+1],cs_g[i]+1:cs_g[i+1]] = beta_p[i] 
-            beta_density[cs_g[i]+1:cs_g[i+1],cs_g[i]+1:cs_g[i+1]] = beta_d[i]
-            for j in connections[i]
-                
-                new_link = sort([i,j]) #checking if we have already linked the two populations
-
-                if new_link ∉ links
-                    #println(new_link)
-                    push!(links, sort([i,j])) #storing the link
-                    
-                    if sim.C_Type == "o" #custom strengths
-                        println("-------------------------------------")
-                        println("Strength of Population  $(i) to Population  $(j) Transmission:")
-                        str = readline()
-                        str = parse(Float64, str)
-                    else #pre-determined strength
-                        str = sim.C_Str
-                    end
-                    #the chosen population
-                    ll = cs_g[i] + 1
-                    ul = cs_g[i] + counts.feral[i]
-                    l_group = rand(ll:ul)
-
-                    #populations the chosen population is linked too
-                    ll_s = cs_g[j] + 1
-
-                    ul_s = cs_g[j] + counts.feral[j]
-
-                    s_group = rand(ll_s:ul_s)
-
-                    beta[l_group,s_group] = str
-                    beta[s_group,l_group] = str
-                    
-                end
-
-            end
-        end
-    
-    beta_density[diagind(beta_density)] .= 0
-    
-    
-    return beta, beta_density
-end
-
-function intial_group_pops(sim, pops)
+function build_populations(sim, pops, network, counts)
     #=
     Function to build the initial populations for each group in each population and Each group is divided into
     five classes- S,E,I,R,C. Also determines in which group ASF is seeded
@@ -658,110 +638,105 @@ function intial_group_pops(sim, pops)
     =#
     
     N_class = 5 #S,E,I,R,C
-    
+    N_pop = counts.pop
+    n_cs = counts.cum_sum
+    N_groups = n_cs[end]
+
+
+    boar = 0.2 #percentage of groups that are solitary boar
     p_i = sim.N_Inf #what population seeded with ASF
-    y_total = [] #vector to store initial populations
+
+    y_total = Vector{Int32}(undef, N_groups*N_class) #vector to store initial populations
+    densities = Vector{Float64}(undef, N_pop) #vector to store each population's density
+    areas = Vector{Float64}(undef,N_pop) #vector to store each population's area
     
-    farm_count = [] #vector to store farm counts
-    feral_count = [] #vector to store feral counts
-    
-    densities = [] #vector to store each population's density
-    areas = [] #vector to store each population's area
-    
-    for i in 1:sim.N_Pop #looping through all populations
+    for i in 1:N_pop #looping through all populations
         
         data = pops[i]
         
         #Density of population
         Density_D = TruncatedNormal(data.Dense[1],data.Dense[2],0,100)
         Density = rand(Density_D)
+        densities[i] = Density
         
-        #number of farms and feral groups for each population are drawn from a distribution
+
+        y_pop = zeros(Int32,N_class*(n_cs[i+1]-n_cs[i]))
         
-        if data.N_feral[1] == 0
-            N_feral = 0
-            push!(feral_count, N_feral)
-        else
-            N_feral_D = TruncatedNormal(data.N_feral[1],data.N_feral[2],0,1000) #number of feral group distribution
-            N_feral = trunc(Int64,rand(N_feral_D))
-            push!(feral_count, N_feral)
-        end
-       
+        N_feral = counts.feral[i]
+        N_boar = round.(Int16, N_feral .* boar)#number of wild boar in pop
+        N_sow = N_feral - N_boar  #number of sow groups in pop
+        N_farm = counts.farm[i] 
+
+        sow_dist = TruncatedNormal(data.N_f[1],data.N_f[2],3,50) #dist for number of pigs in selected feral group
+        sow_groups = round.(Int16,rand(sow_dist, N_sow)) #drawing the populations of each feral group in population
         
-        if data.N_farm[1] == 0
-            N_farm = 0
-            push!(farm_count, N_farm)
-        else
-            N_farm_D = TruncatedNormal(data.N_farm[1],data.N_farm[2],0,100) #number of farms distribution
-            N_farm =  trunc(Int64,rand(N_farm_D))
-            push!(farm_count,N_farm)
-        end
-        
-        push!(densities, Density)
-        
-        N_total = N_feral + N_farm
-        
-        y0 = zeros(N_class*N_total)
-        
-        group_feral_pops = TruncatedNormal(data.N_f[1],data.N_f[2],3,50) #dist for number of pigs in selected feral group
-        pop_groups = round.(Int,rand(group_feral_pops, N_feral)) #drawing the populations of each feral group in population
-        #println(pop_groups)
-        #now seededing ASF in feral populations
-        
+        boar_groups = ones(Int16, N_boar)
+
+        pop_network = copy(network[n_cs[i]+1:n_cs[i+1]-N_farm,n_cs[i]+1:n_cs[i+1]-N_farm]) #isolating network for this pop 
+        pop_network[pop_network .!= 0] .= 1
+        group_degree = vec(sum(Int16, pop_network, dims = 2)) .- 1 #group degree
+        println()
+
+        #now want to choose the N_boar groups with the highest degree as these are boars, the others will be sow_dist
+        index_boar = sort(partialsortperm(group_degree,1:N_boar,rev=true)) #index of all boar groups
+        index_sow = setdiff(1:N_feral, index_boar)
+
+        index_sow_pop = N_class*(index_sow .- 1) .+ 1
+        index_boar_pop = N_class*(index_boar .- 1) .+ 1
+
         if i in p_i #population that have ASF in a group
             
-            g_i = rand(1:N_feral) #choosing group to seed ASF
-         
-            for k in 1:N_feral #looping through groups
-                
-                l = (k-1)*N_class+1
-                
-                if k == g_i # if group is the seeded group
+            #Disease Free Groups
+            asf_sows = rand(index_sow_pop) #choosing group to seed ASF
+            disease_free_sows = setdiff(index_sow_pop,asf_sows)
+            
+            y_pop[disease_free_sows] = sow_groups[2:end]
+
+            y_pop[index_boar_pop] = boar_groups #will not seed in wild boar due to die out
+
+            #Now the dieased group!
+            d_e = TruncatedNormal(data.N_e[1],data.N_e[2], 1, 100) #dist for number of pigs exposed
+            d_i = TruncatedNormal(data.N_i[1],data.N_i[2], 1, 100) #dist for number of pigs infected
                     
-                    d_e = TruncatedNormal(data.N_e[1],data.N_e[2], 0, 100) #dist for number of pigs exposed
-                    d_i = TruncatedNormal(data.N_i[1],data.N_i[2], 0, 100) #dist for number of pigs infected
+            t_e = round(Int16,rand(d_e)) #number of exposed in group
+            t_i = round(Int16,rand(d_i)) #number of infected in group
                     
-                    t_e = round(Int,rand(d_e)) #number of exposed in group
-                    t_i = round(Int,rand(d_i)) #number of infected in group
-                    
-                    t_pop = pop_groups[k]
-                    y0[l] = max(1,t_pop-t_e-t_i)
-                    y0[l+1] = t_e
-                    y0[l+2] = t_i
-                    
-                else
-                    
-                    y0[l] = pop_groups[k]
-                    
-                end
-                
-            end
+            t_pop = Int16(data.N_f[1]) #expected total population of group
+            y_pop[asf_sows] = max(1,t_pop-t_e-t_i) #S
+            y_pop[asf_sows+1] = t_e #E
+            y_pop[asf_sows+2] = t_i #I
             
         else # population does not have ASF in any groups
             
-            y0[1:5:N_class*N_feral] = pop_groups
+            y_pop[index_sow_pop] = sow_groups
+            y_pop[index_boar_pop] = boar_groups
             
         end
         
-        total_pop = sum(y0)
+        total_pop = sum(y_pop)
         total_area = total_pop/Density
         
-        push!(areas, total_area)
+        areas[i] = total_area
         
         #livestock populations
-        group_farm_pops = TruncatedNormal(data.N_l[1],data.N_l[2],0,10000)#distribution of group sizes         
-        farm_groups = round.(Int,rand(group_farm_pops, N_farm))
-        y0[N_class*N_feral+1:5:end] = farm_groups
-
-        append!(y_total, y0)
+        
+        if N_farm > 0
+            group_farm_pops = TruncatedNormal(data.N_l[1],data.N_l[2],1,10000)#distribution of group sizes         
+            farm_groups = round.(Int,rand(group_farm_pops, N_farm))
+            y_pop[N_class*N_feral+1:5:end] = farm_groups
+        end
+        
+        n_cs_class = n_cs*N_class
+        
+        y_total[n_cs_class[i]+1:n_cs_class[i+1]] = y_pop
         
     end
-    
-    counts = Population_Breakdown(feral_count,farm_count, densities, areas, sim.N_Inf)
-    return trunc.(Int,y_total), counts
-
+   
+    #updating area and density storage as we have now caluclated them
+    counts.density = densities
+    counts.area = areas
+    return trunc.(Int,y_total)
     
 end
-
 
 end
