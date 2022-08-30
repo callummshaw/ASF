@@ -130,7 +130,7 @@ mutable struct Model_Parameters
     
     μ_b::Vector{Float64} #birth rate
     μ_d::Vector{Float64} #natural death rate
-    μ_g::Vector{Float64} #density dependent death/birth rate (to ensure carrying capicity)
+    μ_c::Vector{Int32} #carrying capicity
     
     ζ::Vector{Float64} #latent rate
     γ::Vector{Float64} #recovery rate
@@ -162,17 +162,17 @@ struct Model_Data
     Populations_data::Vector{Population_Data} #distributions for params
 
     function Model_Data(Path)
-
+        
         sim, pops = read_inputs(Path)
-        
+     
         Time = (0.0,sim.years[1]*365)
-        
+       
         #now building feral pig network
         network, counts = build_network(sim, pops) 
-
+        
         #Now using network to build init pops
         U0 = build_populations(sim, pops, network, counts) #initial populations
-        
+     
         Parameters = Model_Parameters(sim, pops, U0, counts, network)
         
         new(Time, U0, Parameters, pops)
@@ -256,7 +256,12 @@ function build_network(sim, pops)
         
     end
     counts = Network_Data(feral_pops,farm_pops, sim.N_Inf,[0.0],[0.0])
-    combined_network = combine_networks(network,sim,counts)
+    if n_pops > 1
+        combined_network = combine_networks(network,sim,counts)
+    else
+        combined_network = network[1]
+    end
+    
     return combined_network, counts
 
 end
@@ -327,20 +332,21 @@ function parameter_build(sim, pops, init_pops, counts)
     #=
     Function that builds most parameters for model
     =#
+    birth_death_mod = 0.8
    
     K = init_pops[1:5:end] + init_pops[2:5:end] + init_pops[3:5:end] #carrying capacity of each group
     
     # All other params
-    
-    ζ = [] #latent rate
-    γ = [] #recovery/death rate
-    μ_b = [] #births
-    μ_d = [] #natural death rate
-    μ_g = [] #density dependent deaths
-    ω = [] #corpse infection modifier
-    ρ = [] #ASF mortality
-    λ = [] #corpse decay rate
-    κ = []
+    n_groups = length(K)
+    ζ = Vector{Float64}(undef, n_groups) #latent rate
+    γ = Vector{Float64}(undef, n_groups) #recovery/death rate
+    μ_b = Vector{Float64}(undef, n_groups) #births
+    μ_d = Vector{Float64}(undef, n_groups) #natural death rate
+    μ_c = Vector{Int32}(undef, n_groups) #density dependent deaths
+    ω = Vector{Float64}(undef, n_groups) #corpse infection modifier
+    ρ = Vector{Float64}(undef, n_groups) #ASF mortality
+    λ = Vector{Float64}(undef, n_groups) #corpse decay rate
+    κ = Vector{Float64}(undef, n_groups)
 
     for i in 1:counts.pop
         data =  pops[i]
@@ -353,71 +359,48 @@ function parameter_build(sim, pops, init_pops, counts)
         
         if sim.Identical == true #if running off means
             
-            ζ_r = repeat([data.Latent[1]],nt)
-            append!(ζ,ζ_r)
-            
-            γ_r = repeat([data.Recovery[1]],nt)
-            append!(γ,γ_r)
-            
-            μ_b_r = repeat([data.Birth[1]],nt)
-            append!(μ_b,μ_b_r)
-            
-            μ_d_r = repeat([data.Death_n[1]],nt)
-            append!(μ_d,μ_d_r)
-            
-            μ_g_r =  (μ_b_r-μ_d_r)./K[cs[i]+1:cs[i+1]]
-            append!(μ_g,μ_g_r)
-            
-            ω_r = repeat([data.Corpse[1]],nt)
-            append!(ω,ω_r)
-            
-            ρ_r = repeat([data.Death[1]],nt)
-            append!(ρ,ρ_r)
-            
-            λ_fr = repeat([data.Decay_f[1]],nf)
-            λ_lr = repeat([data.Decay_l[1]],nl)
-            append!(λ,λ_fr)
-            append!(λ,λ_lr)
+            ζ[cs[i]+1:cs[i+1]] .= data.Latent[1]
+            γ[cs[i]+1:cs[i+1]] .= data.Recovery[1]
+            μ_b[cs[i]+1:cs[i+1]] .= data.Births[1]
+            μ_d[cs[i]+1:cs[i+1]] .= birth_death_mod*data.Births[1]
+            μ_c[cs[i]+1:cs[i+1]] = K[cs[i]+1:cs[i+1]]
+            ω[cs[i]+1:cs[i+1]] .= data.Corpse[1]
+            ρ[cs[i]+1:cs[i+1]] .= data.Death[1]
+            κ[cs[i]+1:cs[i+1]] .= data.Immunity[1]
+            λ[cs[i]+1:cs[i]+nf] .= data.Decay_f[1]
+            λ[cs[i]+nf+1:cs[i+1]] .= data.Decay_l[1]
 
-            κ_r = repeat([data.Immunity[1]],nt)
-            append!(κ,κ_r)
         else #running of distros
             
             ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 5) #latent dist
             γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 5) #r/d rate dist
             μ_b_d = TruncatedNormal(data.Birth[1], data.Birth[2], 0, 1) #birth dist
-            μ_d_d = TruncatedNormal(data.Death_n[1], data.Death_n[2], 0, 1) #n death dist
+            #μ_d_d = TruncatedNormal(data.Death_n[1], data.Death_n[2], 0, 1) #n death dist
             ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2], 0, 1) #corpse inf dist
             ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
             λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 1) #corpse decay feral dist
             λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2], 0, 5) #corpse decay farm dist
             κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 1)
 
-            append!(ζ,rand(ζ_d,nt))
-            append!(γ,rand(γ_d,nt))
-            append!(ω,rand(ω_d,nt))
-            append!(ρ,rand(ρ_d,nt))
-            append!(κ,rand(κ_d,nt))
+            ζ[cs[i]+1:cs[i+1]] = rand(ζ_d,nt)
+            γ[cs[i]+1:cs[i+1]] = rand(γ_d,nt)
+            ω[cs[i]+1:cs[i+1]] = rand(ω_d,nt)
+            ρ[cs[i]+1:cs[i+1]] = rand(ρ_d,nt)
+            κ[cs[i]+1:cs[i+1]] = rand(κ_d,nt)
 
-            μ_b_r = rand(μ_b_d,nt)
-            μ_d_r = rand(μ_d_d,nt)
-            
-            #μ_d_r[μ_d_r.>μ_b_r] = μ_b_r[μ_d_r.>μ_b_r]
-            
-            append!(μ_b, μ_b_r)
-            append!(μ_d, μ_d_r) 
-            
-            μ_g_r =  (μ_b_r-μ_d_r)./K[cs[i]+1:cs[i+1]]
-            append!(μ_g,μ_g_r)
-            
-            append!(λ,rand(λ_fd,nf))
-            append!(λ,rand(λ_ld,nl))
-        
+            μ_b_r = rand(μ_b_d,nt) 
+            μ_b[cs[i]+1:cs[i+1]] = μ_b_r
+            μ_d[cs[i]+1:cs[i+1]] = birth_death_mod*μ_b_r
+            μ_c[cs[i]+1:cs[i+1]] = K[cs[i]+1:cs[i+1]]
+
+            λ[cs[i]+1:cs[i]+nf] .= rand(λ_fd,nf)
+            λ[cs[i]+nf+1:cs[i+1]] .= rand(λ_ld,nl)
+
         end
         
     end
 
-    return  μ_b, μ_d, μ_g, ζ, γ, ω, ρ, λ, κ
+    return  μ_b, μ_d, μ_c, ζ, γ, ω, ρ, λ, κ
     
 end
 
@@ -561,7 +544,7 @@ function beta_construction(sim, pops, counts, network)
 
     n_pops = counts.pop
     n_cs = counts.cum_sum
-    beta = copy(network)
+    beta = Float64.(copy(network))
     connected_births = copy(network)
     
     connected_births[connected_births .!= 200] .= 0 #only wanted connected groups within same pop
@@ -667,7 +650,7 @@ function build_populations(sim, pops, network, counts)
         N_sow = N_feral - N_boar  #number of sow groups in pop
         N_farm = counts.farm[i] 
 
-        sow_dist = TruncatedNormal(data.N_f[1],data.N_f[2],3,50) #dist for number of pigs in selected feral group
+        sow_dist = TruncatedNormal(data.N_f[1],data.N_f[2],3,500) #dist for number of pigs in selected feral group
         sow_groups = round.(Int16,rand(sow_dist, N_sow)) #drawing the populations of each feral group in population
         
         boar_groups = ones(Int16, N_boar)
@@ -675,7 +658,6 @@ function build_populations(sim, pops, network, counts)
         pop_network = copy(network[n_cs[i]+1:n_cs[i+1]-N_farm,n_cs[i]+1:n_cs[i+1]-N_farm]) #isolating network for this pop 
         pop_network[pop_network .!= 0] .= 1
         group_degree = vec(sum(Int16, pop_network, dims = 2)) .- 1 #group degree
-        println()
 
         #now want to choose the N_boar groups with the highest degree as these are boars, the others will be sow_dist
         index_boar = sort(partialsortperm(group_degree,1:N_boar,rev=true)) #index of all boar groups

@@ -18,15 +18,16 @@ function density_rate(out,u,p,t)
     I = u[3:5:end]
     R = u[4:5:end]
     C = u[5:5:end]
-    
-    N = S + E + I + R + C .+ 0.001
+  
+    N = S + E + I + R + C .+ 0.0001
     Np = S + E + I + R
     
     Pops = p.Populations 
     
     tp = Pops.cum_sum[end]
+
     beta = copy(p.β)
-    
+
     for i in 1:Pops.pop
         j = i + 1 
 
@@ -41,85 +42,24 @@ function density_rate(out,u,p,t)
     column(i) = N .+ N[i]
     populations  = hcat([column(i) for i=1:tp]...)
     populations[diagind(populations)] = N;
-    
-    w_births = 0.8
-    o_births = (1.0 - w_births) / mean(sum(p.β_b,dims=2) .- 1)
 
+  
+    connected_pops = p.β_b * Np
 
-    Births = w_births*p.μ_b .* Np + o_births.*(p.μ_b .* (p.β_b * Np))
+    Births = p.μ_b .* Np
+    Births[(p.μ_c .== 1) .& (Np .> 0)] .= 0 #preventing boar populations growing larger than one!
+    Births[(Np .== 0) .& (connected_pops .> 2)] = p.μ_b[(Np .== 0) .& (connected_pops .> 2)]*2 #allowing migration births if neighbouring groups have pop
     Infect = ((beta .* S) ./ populations) * (I + p.ω .* C)#ASF Infections
     Infectous = p.ζ .* E
     Recover = p.γ .* (1 .- p.ρ) .* I #ASF Recoveries
     Death_I = p.ρ .* p.γ .* I #ASF Deaths in I
-    Death_nI = p.μ_d .* I+ p.μ_g .* (Np .* I) #Natural Deaths in I
-    Death_S = p.μ_d .* S + p.μ_g .* (Np .* S) #Natural Deaths S
-    Death_E = p.μ_d .* E + p.μ_g .* (Np .* E)
-    Death_R = p.μ_d .* R + p.μ_g .* (Np .* R) #Natural Deaths R
+    Death_nI = p.μ_d .* I+ (p.μ_b-p.μ_d)./tanh(1).*I.*tanh.(Np./p.μ_c) #Natural Deaths in I
+    Death_S = p.μ_d .* S + (p.μ_b-p.μ_d)./tanh(1).*S.*tanh.(Np./p.μ_c) #Natural Deaths S
+    Death_E = p.μ_d .* E + (p.μ_b-p.μ_d)./tanh(1).*E.*tanh.(Np./p.μ_c)
+    Death_R = p.μ_d .* R + (p.μ_b-p.μ_d)./tanh(1).*R.*tanh.(Np./p.μ_c) #Natural Deaths R
     Decay_C = p.λ .* C #Body Decomposition 
     W_Immunity = p.κ .* R
-    
-    out[1:11:end] = Births
-    out[2:11:end] = Death_S
-    out[3:11:end] = Infect
-    out[4:11:end] = Death_E
-    out[5:11:end] = Infectous
-    out[6:11:end] = Death_I
-    out[7:11:end] = Death_nI
-    out[8:11:end] = Recover
-    out[9:11:end] = Death_R
-    out[10:11:end] = Decay_C
-    out[11:11:end] = W_Immunity
-end
-
-function frequency_rate(out,u,p,t)
    
-    u[u.<0].=0 
-    S = u[1:5:end]
-    E = u[2:5:end]
-    I = u[3:5:end]
-    R = u[4:5:end]
-    C = u[5:5:end]
-    
-    N = S + E + I + R + C .+ 0.001
-    Np = S + E + I + R
-    
-    Pops = p.Populations 
-    
-    tp = Pops.cum_sum[end]
-    beta = copy(p.β)
-    
-    reference_density = 4
-    
-    for i in 1:Pops.pop
-        j = i + 1 
-
-        nf = Pops.feral[i] #number of feral groups in region
-        nt = Pops.total[i] #number of feral groups and farms in region
-        ncs = Pops.cum_sum[i] #cumsum of farm and ferals over all regions
-
-        N_feral = sum(N[ncs+1:ncs+nf]) #total feral population in region i
-        Density = N_feral/Pops.area[i]
-        beta[p.β_d .== j] .*= Density
-
-    end
-
-    column(i) = N .+ N[i]
-    populations  = hcat([column(i) for i=1:tp]...)
-    populations[diagind(populations)] = N;
-    
-    Births = p.μ_b.*Np #+ 1*(p.μ_b .* (p.β_b * Np))
-    Infect = ((beta .* S) ./ populations) * (I + p.ω .* C)#ASF Infections
-    Infectous = p.ζ .* E
-    Recover = p.γ .* (1 .- p.ρ) .* I #ASF Recoveries
-    Death_I = p.ρ .* p.γ .* I #ASF Deaths in I
-    Death_nI = p.μ_d .* I+ p.μ_g .* (Np .* I) #Natural Deaths in I
-    Death_S = p.μ_d .* S + p.μ_g .* (Np .* S) #Natural Deaths S
-    Death_E = p.μ_d .* E + p.μ_g .* (Np .* E)
-    Death_R = p.μ_d .* R + p.μ_g .* (Np .* R) #Natural Deaths R
-    Decay_C = p.λ .* C #Body Decomposition 
-    W_Immunity = p.κ .* R
-    
-    
     out[1:11:end] = Births
     out[2:11:end] = Death_S
     out[3:11:end] = Infect
@@ -131,6 +71,8 @@ function frequency_rate(out,u,p,t)
     out[9:11:end] = Death_R
     out[10:11:end] = Decay_C
     out[11:11:end] = W_Immunity
+
+    nothing
 end
 
 function reparam!(input)
