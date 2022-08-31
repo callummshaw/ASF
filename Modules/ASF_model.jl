@@ -83,19 +83,23 @@ function reparam!(input)
     pops = input.Populations_data
     counts = input.Parameters.Populations
     
+    birth_death_mod = 0.8
+   
     K = init_pops[1:5:end] + init_pops[2:5:end] + init_pops[3:5:end] #carrying capacity of each group
     
+    cs = counts.cum_sum
+
     # All other params
-    
-    ζ = [] #latent rate
-    γ = [] #recovery/death rate
-    μ_b = [] #births
-    μ_d = [] #natural death rate
-    μ_g = [] #density dependent deaths
-    ω = [] #corpse infection modifier
-    ρ = [] #ASF mortality
-    λ = [] #corpse decay rate
-    κ = []
+    n_groups = length(K)
+    ζ = Vector{Float64}(undef, n_groups) #latent rate
+    γ = Vector{Float64}(undef, n_groups) #recovery/death rate
+    μ_b = Vector{Float64}(undef, n_groups) #births
+    μ_d = Vector{Float64}(undef, n_groups) #natural death rate
+    μ_c = Vector{Int32}(undef, n_groups) #density dependent deaths
+    ω = Vector{Float64}(undef, n_groups) #corpse infection modifier
+    ρ = Vector{Float64}(undef, n_groups) #ASF mortality
+    λ = Vector{Float64}(undef, n_groups) #corpse decay rate
+    κ = Vector{Float64}(undef, n_groups)
 
     for i in 1:counts.pop
         data =  pops[i]
@@ -104,46 +108,39 @@ function reparam!(input)
         nl = counts.farm[i]
         nt = counts.total[i]
         
-        cs = counts.cum_sum
-        
-        ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2],0,5) #latent dist
-        γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2],0,5) #r/d rate dist
-        μ_b_d = TruncatedNormal(data.Birth[1], data.Birth[2],0,1) #birth dist
-        μ_d_d = TruncatedNormal(data.Death_n[1], data.Death_n[2],0,1) #n death dist
-        ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2],0,1) #corpse inf dist
-        ρ_d = TruncatedNormal(data.Death[1], data.Death[2],0,1) #mortality dist
-        λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2],0,1) #corpse decay feral dist
-        λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2],0,5) #corpse decay farm dist
-        κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 1)
+        ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 5) #latent dist
+            γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 5) #r/d rate dist
+            μ_b_d = TruncatedNormal(data.Birth[1], data.Birth[2], 0, 1) #birth dist
+            #μ_d_d = TruncatedNormal(data.Death_n[1], data.Death_n[2], 0, 1) #n death dist
+            ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2], 0, 1) #corpse inf dist
+            ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
+            λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 1) #corpse decay feral dist
+            λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2], 0, 5) #corpse decay farm dist
+            κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 1)
 
-        append!(ζ,rand(ζ_d,nt))
-        append!(γ,rand(γ_d,nt))
-        append!(ω,rand(ω_d,nt))
-        append!(ρ,rand(ρ_d,nt))
-        append!(κ,rand(κ_d,nt))
+            ζ[cs[i]+1:cs[i+1]] = rand(ζ_d,nt)
+            γ[cs[i]+1:cs[i+1]] = rand(γ_d,nt)
+            ω[cs[i]+1:cs[i+1]] = rand(ω_d,nt)
+            ρ[cs[i]+1:cs[i+1]] = rand(ρ_d,nt)
+            κ[cs[i]+1:cs[i+1]] = rand(κ_d,nt)
 
-        μ_b_r = rand(μ_b_d,nt)
-        μ_d_r = rand(μ_d_d,nt)
+            μ_b_r = rand(μ_b_d,nt) 
+            μ_b[cs[i]+1:cs[i+1]] = μ_b_r
+            μ_d[cs[i]+1:cs[i+1]] = birth_death_mod*μ_b_r
+            μ_c[cs[i]+1:cs[i+1]] = K[cs[i]+1:cs[i+1]]
 
-        append!(μ_b, μ_b_r)
-        append!(μ_d, μ_d_r) 
+            λ[cs[i]+1:cs[i]+nf] .= rand(λ_fd,nf)
+            λ[cs[i]+nf+1:cs[i+1]] .= rand(λ_ld,nl)
 
-        μ_g_r =  (μ_b_r-μ_d_r)./K[cs[i]+1:cs[i+1]]
-        append!(μ_g,μ_g_r)
-
-        append!(λ,rand(λ_fd,nf))
-        append!(λ,rand(λ_ld,nl))
         
     end
-    
-    
     
     input.Parameters.γ = γ
     input.Parameters.ζ = ζ
     input.Parameters.λ = λ
     input.Parameters.μ_b = μ_b 
     input.Parameters.μ_d = μ_d
-    input.Parameters.μ_g = μ_g
+    input.Parameters.μ_c = μ_c
     input.Parameters.ω = ω 
     input.Parameters.ρ = ρ
     input.Parameters.κ = κ
@@ -151,7 +148,6 @@ function reparam!(input)
 end
 
 function rebeta!(input)
-    
     
     pops = input.Populations_data
     counts = input.Parameters.Populations

@@ -26,8 +26,10 @@ struct Meta_Data <: Data_Input
     Identical::Bool #if we params to be drawn from dist or just means of dist
     N_Pop::Int64 #number of populations, must match the number of population files in input
     N_Inf::Vector{Int64} #number of populations init with ASF
+    N_Seed::Int16
     C_Type::String #what kind of connection we want to init with between populations, line (l), circular (c), total (t), or off (o)
     C_Str::Float64 #strength of the connections between populations, note this is only for l,c,t
+    Network::String #Type of network used for model random (r), scale-free (s), or small worlds (w)
 
     function Meta_Data(input, numv)
         Ny = parse(Int64, input.Value[1])
@@ -35,9 +37,11 @@ struct Meta_Data <: Data_Input
         I = (input.Value[3] == "true")
         Np = parse(Int64, input.Value[4])
         Ni = numv
-        Ct = input.Value[6]
-        Cs = parse(Float64, input.Value[7])
-        new(Ny,Ne,I,Np,Ni,Ct,Cs)
+        Ns = parse(Int16, input.Value[6])
+        Ct = input.Value[7]
+        Cs = parse(Float64, input.Value[8])
+        Nw = input.Value[9]
+        new(Ny,Ne,I,Np,Ni,Ns,Ct,Cs,Nw)
     end
 end
 
@@ -220,14 +224,41 @@ function build_network(sim, pops)
             n_aim = data.N_int[1]
         end
 
-        #using an erdos-renyi random network to determine inter-group interactions
-        p_c = n_aim / n_o #probability of a connection
+    
+        #this is where we buidl the three types of network, default is random but can allow for other network types
 
-        if p_c == 1
-            feral = erdos_renyi(nf,sum(1:n_o)) #every group connected with every other
+        if sim.Network == "s" #only works with even degrees 
+            
+            println(" Barabasi Albert Scale Free Network")
+            if isodd(n_aim)
+                @warn "Odd group degree detected, Scale free and small worlds require even degree"
+            end
+            
+            adds = n_aim ÷ 2
+            feral = barabasi_albert(nf, adds)
+
+        elseif sim.Network == "w" #only works with even degrees
+            
+            println("Watts Strogatz Small Worlds Network")
+            if isodd(n_aim)
+                @warn "Odd group degree detected, Scale free and small worlds require even degree"
+            end
+
+            level = 0.5
+            feral = watts_strogatz(nf, n_aim, level)
+            
         else
-            feral = erdos_renyi(nf,p_c) #not all groups are connected to every other
+            println("Erdos Renyi Random Network")
+            #using an erdos-renyi random network to determine inter-group interactions
+            p_c = n_aim / n_o #probability of a connection
+
+            if p_c == 1
+                feral = erdos_renyi(nf,sum(1:n_o)) #every group connected with every other
+            else
+                feral = erdos_renyi(nf,p_c) #not all groups are connected to every other
+            end
         end
+        
 
         network_feral = Matrix(adjacency_matrix(feral))*200 #inter feral = 2
         network_feral[diagind(network_feral)] .= 100 #intra feral = 1
@@ -520,7 +551,7 @@ end
 function infected_populations(input)
     number_pops  = parse(Int64, input.Value[4]) #number of populations 
     number_seeded = parse(Int64, input.Value[5]) #number of populations seeded with ASF
-    con_type = input.Value[6]
+    con_type = input.Value[7]
 
     if (con_type == "o") & (number_pops > 1) #for runs with 2+ populations can choose what population we seed if custom
         println("-------------------------------------")
@@ -628,13 +659,15 @@ function build_populations(sim, pops, network, counts)
 
     boar = 0.2 #percentage of groups that are solitary boar
     p_i = sim.N_Inf #what population seeded with ASF
-
+    n_seed = sim.N_Seed #number of groups in said population that are seeded
+    
     y_total = Vector{Int32}(undef, N_groups*N_class) #vector to store initial populations
     densities = Vector{Float64}(undef, N_pop) #vector to store each population's density
     areas = Vector{Float64}(undef,N_pop) #vector to store each population's area
     
     for i in 1:N_pop #looping through all populations
         
+        #population data
         data = pops[i]
         
         #Density of population
@@ -642,51 +675,68 @@ function build_populations(sim, pops, network, counts)
         Density = rand(Density_D)
         densities[i] = Density
         
-
+        #vector to store  population numbers for each class of each group
         y_pop = zeros(Int32,N_class*(n_cs[i+1]-n_cs[i]))
         
-        N_feral = counts.feral[i]
+        
+        N_feral = counts.feral[i] #number of feral groups 
         N_boar = round.(Int16, N_feral .* boar)#number of wild boar in pop
         N_sow = N_feral - N_boar  #number of sow groups in pop
-        N_farm = counts.farm[i] 
+        N_farm = counts.farm[i] #number of farms in population
 
-        sow_dist = TruncatedNormal(data.N_f[1],data.N_f[2],3,500) #dist for number of pigs in selected feral group
+        sow_dist = TruncatedNormal(data.N_f[1],data.N_f[2],3,500) #dist for number of pigs in sow feral group
         sow_groups = round.(Int16,rand(sow_dist, N_sow)) #drawing the populations of each feral group in population
-        
-        boar_groups = ones(Int16, N_boar)
+    
+        pop_network = copy(network[n_cs[i]+1:n_cs[i+1]-N_farm,n_cs[i]+1:n_cs[i+1]-N_farm]) #isolating network for this feral pop 
+        pop_network[pop_network .!= 0] .= 1 #seeting all 
+        group_degree = vec(sum(Int16, pop_network, dims = 2)) .- 1 #group degree -1 as not counting inta group connections 
 
-        pop_network = copy(network[n_cs[i]+1:n_cs[i+1]-N_farm,n_cs[i]+1:n_cs[i+1]-N_farm]) #isolating network for this pop 
-        pop_network[pop_network .!= 0] .= 1
-        group_degree = vec(sum(Int16, pop_network, dims = 2)) .- 1 #group degree
+        if sum(group_degree  .== 0) > 0
+            println("Warning ",sum(group_degree  .== 0), " disconnected feral groups!")
+        end
 
         #now want to choose the N_boar groups with the highest degree as these are boars, the others will be sow_dist
         index_boar = sort(partialsortperm(group_degree,1:N_boar,rev=true)) #index of all boar groups
-        index_sow = setdiff(1:N_feral, index_boar)
-
-        index_sow_pop = N_class*(index_sow .- 1) .+ 1
-        index_boar_pop = N_class*(index_boar .- 1) .+ 1
+        index_sow = setdiff(1:N_feral, index_boar) #index of all sow groups
+        index_sow_pop = N_class*(index_sow .- 1) .+ 1 #index of S for all sows
+        index_boar_pop = N_class*(index_boar .- 1) .+ 1 #index of S for all boars
 
         if i in p_i #population that have ASF in a group
-            
+
+            group_index = N_class*((1:N_feral) .- 1) .+ 1 #index of S for all groups
+            seeded_groups = rand(group_index,n_seed) #index of S for all groups that are seeded with ASF!
+
+            sow_inf = seeded_groups[seeded_groups .∈  [index_sow_pop]] #sow groups that are seeded
+            boar_inf = seeded_groups[seeded_groups .∈  [index_boar_pop]] #boar groups that are seeded
+
+            n_si = length(sow_inf)
+           
             #Disease Free Groups
-            asf_sows = rand(index_sow_pop) #choosing group to seed ASF
-            disease_free_sows = setdiff(index_sow_pop,asf_sows)
+            disease_free_sows = setdiff(index_sow_pop,sow_inf)
+            disease_free_boars = setdiff(index_boar_pop,boar_inf)
             
-            y_pop[disease_free_sows] = sow_groups[2:end]
+            y_pop[disease_free_sows] = sow_groups[n_si+1:end]
+            y_pop[disease_free_boars] .= 1 
 
-            y_pop[index_boar_pop] = boar_groups #will not seed in wild boar due to die out
-
-            #Now the dieased group!
+            #Now the dieased group(s)!
+            
+            #for sows
             d_e = TruncatedNormal(data.N_e[1],data.N_e[2], 1, 100) #dist for number of pigs exposed
             d_i = TruncatedNormal(data.N_i[1],data.N_i[2], 1, 100) #dist for number of pigs infected
                     
-            t_e = round(Int16,rand(d_e)) #number of exposed in group
-            t_i = round(Int16,rand(d_i)) #number of infected in group
+            t_e = round.(Int16,rand(d_e,n_si)) #number of exposed in infected sow groups
+            t_i = round.(Int16,rand(d_i,n_si)) #number of infected in infected sow groups
                     
-            t_pop = Int16(data.N_f[1]) #expected total population of group
-            y_pop[asf_sows] = max(1,t_pop-t_e-t_i) #S
-            y_pop[asf_sows+1] = t_e #E
-            y_pop[asf_sows+2] = t_i #I
+            t_pop = sow_groups[1:n_si] #expected total population of infected sow groups
+
+            y_pop[sow_inf] = max.(0,t_pop-t_e-t_i) #S
+            y_pop[sow_inf .+ 1] = t_e #E
+            y_pop[sow_inf .+ 2] = t_i #I
+
+            #for boars
+            #I am assuming that all boars will be infective
+
+            y_pop[boar_inf .+ 2] .= 1 
             
         else # population does not have ASF in any groups
             
