@@ -704,7 +704,7 @@ function build_populations(sim, pops, network, counts)
         if i in p_i #population that have ASF in a group
 
             group_index = N_class*((1:N_feral) .- 1) .+ 1 #index of S for all groups
-            seeded_groups = rand(group_index,n_seed) #index of S for all groups that are seeded with ASF!
+            seeded_groups = unique(rand(group_index,n_seed)) #index of S for all groups that are seeded with ASF!
 
             sow_inf = seeded_groups[seeded_groups .∈  [index_sow_pop]] #sow groups that are seeded
             boar_inf = seeded_groups[seeded_groups .∈  [index_boar_pop]] #boar groups that are seeded
@@ -715,6 +715,7 @@ function build_populations(sim, pops, network, counts)
             disease_free_sows = setdiff(index_sow_pop,sow_inf)
             disease_free_boars = setdiff(index_boar_pop,boar_inf)
             
+        
             y_pop[disease_free_sows] = sow_groups[n_si+1:end]
             y_pop[disease_free_boars] .= 1 
 
@@ -741,7 +742,7 @@ function build_populations(sim, pops, network, counts)
         else # population does not have ASF in any groups
             
             y_pop[index_sow_pop] = sow_groups
-            y_pop[index_boar_pop] = boar_groups
+            y_pop[index_boar_pop] .= 1
             
         end
         
