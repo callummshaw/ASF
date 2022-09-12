@@ -47,27 +47,27 @@ end
 
 struct Population_Data <: Data_Input
     
-    Dense::Vector{Float32} #density of population
+    Dense::Vector{Float64} #density of population
     N_feral::Vector{Int16} #number of feral groups
     N_farm::Vector{Int8} #number of farm groups
     N_int::Vector{Int8} #average interconnection between feral groups
-    B_f::Vector{Float32} #intra feral group transmission
-    B_l::Vector{Float32} #intra farm transmission
-    B_ff::Vector{Float32} #inter feral group transmission
-    B_fl::Vector{Float32} #farm-feral transmission
-    Death::Vector{Float32} #ASF death prob
-    Recovery::Vector{Float32}#Recovery rate
-    Latent::Vector{Float32} #latent period
-    Corpse::Vector{Float32} #corpse infection modifier
-    Decay_l::Vector{Float32} #decay farm
-    Decay_f::Vector{Float32} #decay feral
-    N_f::Vector{Float32} #feral population size
-    N_l::Vector{Float32} #farm population size
-    N_e::Vector{Float32} #number of exposed in seeded
-    N_i::Vector{Float32} #number of infected in seeded
-    Birth::Vector{Float32} #birth rate
-    Death_n::Vector{Float32} #natural death rate
-    Immunity::Vector{Float32}
+    B_f::Vector{Float64} #intra feral group transmission
+    B_l::Vector{Float64} #intra farm transmission
+    B_ff::Vector{Float64} #inter feral group transmission
+    B_fl::Vector{Float64} #farm-feral transmission
+    Death::Vector{Float64} #ASF death prob
+    Recovery::Vector{Float64}#Recovery rate
+    Latent::Vector{Float64} #latent period
+    Corpse::Vector{Float64} #corpse infection modifier
+    Decay_l::Vector{Float64} #decay farm
+    Decay_f::Vector{Float64} #decay feral
+    N_f::Vector{Float64} #feral population size
+    N_l::Vector{Float64} #farm population size
+    N_e::Vector{Float64} #number of exposed in seeded
+    N_i::Vector{Float64} #number of infected in seeded
+    Birth::Vector{Float64} #birth rate
+    Death_n::Vector{Float64} #natural death rate
+    Immunity::Vector{Float64}
 
     function Population_Data(input)
         
