@@ -21,25 +21,25 @@ struct Meta_Data <: Data_Input
     using distros or just mean values for parameters, the number of 
     populations and the number of said populations seeded with ASF
     =#
-    years::Float64 #years simulation will run for
-    N_ensemble::Int64 #number of runs in an ensemble
+    years::Float16 #years simulation will run for
+    N_ensemble::Int16 #number of runs in an ensemble
     Identical::Bool #if we params to be drawn from dist or just means of dist
-    N_Pop::Int64 #number of populations, must match the number of population files in input
-    N_Inf::Vector{Int64} #number of populations init with ASF
-    N_Seed::Int16
+    N_Pop::Int8 #number of populations, must match the number of population files in input
+    N_Inf::Vector{Int8} #number of populations init with ASF
+    N_Seed::Int8
     C_Type::String #what kind of connection we want to init with between populations, line (l), circular (c), total (t), or off (o)
-    C_Str::Float64 #strength of the connections between populations, note this is only for l,c,t
+    C_Str::Float32 #strength of the connections between populations, note this is only for l,c,t
     Network::String #Type of network used for model random (r), scale-free (s), or small worlds (w)
 
     function Meta_Data(input, numv)
-        Ny = parse(Int64, input.Value[1])
-        Ne = parse(Float64,input.Value[2])
+        Ny = parse(Int16, input.Value[1])
+        Ne = parse(Int16,input.Value[2])
         I = (input.Value[3] == "true")
-        Np = parse(Int64, input.Value[4])
+        Np = parse(Int8, input.Value[4])
         Ni = numv
         Ns = parse(Int16, input.Value[6])
         Ct = input.Value[7]
-        Cs = parse(Float64, input.Value[8])
+        Cs = parse(Float32, input.Value[8])
         Nw = input.Value[9]
         new(Ny,Ne,I,Np,Ni,Ns,Ct,Cs,Nw)
     end
@@ -47,27 +47,27 @@ end
 
 struct Population_Data <: Data_Input
     
-    Dense::Vector{Float64} #density of population
-    N_feral::Vector{Int64} #number of feral groups
-    N_farm::Vector{Int64} #number of farm groups
-    N_int::Vector{Int64} #average interconnection between feral groups
-    B_f::Vector{Float64} #intra feral group transmission
-    B_l::Vector{Float64} #intra farm transmission
-    B_ff::Vector{Float64} #inter feral group transmission
-    B_fl::Vector{Float64} #farm-feral transmission
-    Death::Vector{Float64} #ASF death prob
-    Recovery::Vector{Float64}#Recovery rate
-    Latent::Vector{Float64} #latent period
-    Corpse::Vector{Float64} #corpse infection modifier
-    Decay_l::Vector{Float64} #decay farm
-    Decay_f::Vector{Float64} #decay feral
-    N_f::Vector{Float64} #feral population size
-    N_l::Vector{Float64} #farm population size
-    N_e::Vector{Float64} #number of exposed in seeded
-    N_i::Vector{Float64} #number of infected in seeded
-    Birth::Vector{Float64} #birth rate
-    Death_n::Vector{Float64} #natural death rate
-    Immunity::Vector{Float64}
+    Dense::Vector{Float32} #density of population
+    N_feral::Vector{Int16} #number of feral groups
+    N_farm::Vector{Int8} #number of farm groups
+    N_int::Vector{Int8} #average interconnection between feral groups
+    B_f::Vector{Float32} #intra feral group transmission
+    B_l::Vector{Float32} #intra farm transmission
+    B_ff::Vector{Float32} #inter feral group transmission
+    B_fl::Vector{Float32} #farm-feral transmission
+    Death::Vector{Float32} #ASF death prob
+    Recovery::Vector{Float32}#Recovery rate
+    Latent::Vector{Float32} #latent period
+    Corpse::Vector{Float32} #corpse infection modifier
+    Decay_l::Vector{Float32} #decay farm
+    Decay_f::Vector{Float32} #decay feral
+    N_f::Vector{Float32} #feral population size
+    N_l::Vector{Float32} #farm population size
+    N_e::Vector{Float32} #number of exposed in seeded
+    N_i::Vector{Float32} #number of infected in seeded
+    Birth::Vector{Float32} #birth rate
+    Death_n::Vector{Float32} #natural death rate
+    Immunity::Vector{Float32}
 
     function Population_Data(input)
         
@@ -104,15 +104,15 @@ mutable struct Network_Data
     Structure to store key data on each population, internal just to keep track of a few params
     =#
     feral::Vector{Int16}
-    farm::Vector{Int16}
-    pop::Int16
+    farm::Vector{Int8}
+    pop::Int8
     total::Vector{Int16}
     cum_sum::Vector{Int16}
     
-    inf::Vector{Int16}
+    inf::Vector{Int6}
     
-    density::Vector{Float64}
-    area::Vector{Float64}
+    density::Vector{Float32}
+    area::Vector{Float32}
 
     function Network_Data(feral,farm, inf, density,area)
         n = size(feral)[1]
@@ -128,20 +128,20 @@ mutable struct Model_Parameters
     Structure to store key parameters
     =#
     
-    β::Matrix{Float64} #transmission matrix
-    β_b::Matrix{Float64} #what feral groups are linked to each other, for births
-    β_d::Matrix{Float64} #used to identify feral groups and farms for each population for density calcualtions
+    β::Matrix{Float32} #transmission matrix
+    β_b::Matrix{Int16} #what feral groups are linked to each other, for births
+    β_d::Matrix{Int16} #used to identify feral groups and farms for each population for density calcualtions
     
-    μ_b::Vector{Float64} #birth rate
-    μ_d::Vector{Float64} #natural death rate
-    μ_c::Vector{Int32} #carrying capicity
+    μ_b::Vector{Float32} #birth rate
+    μ_d::Vector{Float32} #natural death rate
+    μ_c::Vector{Int16} #carrying capicity
     
-    ζ::Vector{Float64} #latent rate
-    γ::Vector{Float64} #recovery rate
-    ω::Vector{Float64} #corpse infection modifier
-    ρ::Vector{Float64} #death probability
-    λ::Vector{Float64} #corpse decay rate
-    κ::Vector{Float64} #loss of immunity rate
+    ζ::Vector{Float32} #latent rate
+    γ::Vector{Float32} #recovery rate
+    ω::Vector{Float32} #corpse infection modifier
+    ρ::Vector{Float32} #death probability
+    λ::Vector{Float32} #corpse decay rate
+    κ::Vector{Float32} #loss of immunity rate
 
 
     Populations::Network_Data #breakdown of population
@@ -160,8 +160,8 @@ struct Model_Data
     #=
     Structure to store key data on mode
     =#
-    Time::Tuple{Float64, Float64} #Model run time
-    U0::Vector{Int64} #Initial Population
+    Time::Tuple{Float32, Float32} #Model run time
+    U0::Vector{Int32} #Initial Population
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
 
@@ -201,7 +201,7 @@ function build_network(sim, pops)
             nf = 0
         else
             nf_d = TruncatedNormal(data.N_feral[1],data.N_feral[2],0,1000) #number of feral group distribution
-            nf = trunc(Int64,rand(nf_d))
+            nf = trunc(Int16,rand(nf_d))
         end
        
         #Farm dist     
@@ -209,7 +209,7 @@ function build_network(sim, pops)
             nl = 0
         else
             nl_d = TruncatedNormal(data.N_farm[1],data.N_farm[2],0,100) #number of farms distribution
-            nl =  trunc(Int64,rand(nl_d))
+            nl =  trunc(Int16,rand(nl_d))
         end
         
         feral_pops[pop] = nf
@@ -325,7 +325,7 @@ function combine_networks(network,sim, counts)
                     println("-------------------------------------")
                     println("Strength of Population  $(i) to Population  $(j) Transmission:")
                     str = readline()
-                    str = parse(Float64, str)
+                    str = parse(Float32, str)
                 else #pre-determined strength
                     str = sim.C_Str
                 end
@@ -369,15 +369,15 @@ function parameter_build(sim, pops, init_pops, counts)
     
     # All other params
     n_groups = length(K)
-    ζ = Vector{Float64}(undef, n_groups) #latent rate
-    γ = Vector{Float64}(undef, n_groups) #recovery/death rate
-    μ_b = Vector{Float64}(undef, n_groups) #births
-    μ_d = Vector{Float64}(undef, n_groups) #natural death rate
+    ζ = Vector{Float32}(undef, n_groups) #latent rate
+    γ = Vector{Float32}(undef, n_groups) #recovery/death rate
+    μ_b = Vector{Float32}(undef, n_groups) #births
+    μ_d = Vector{Float32}(undef, n_groups) #natural death rate
     μ_c = Vector{Int32}(undef, n_groups) #density dependent deaths
-    ω = Vector{Float64}(undef, n_groups) #corpse infection modifier
-    ρ = Vector{Float64}(undef, n_groups) #ASF mortality
-    λ = Vector{Float64}(undef, n_groups) #corpse decay rate
-    κ = Vector{Float64}(undef, n_groups)
+    ω = Vector{Float32}(undef, n_groups) #corpse infection modifier
+    ρ = Vector{Float32}(undef, n_groups) #ASF mortality
+    λ = Vector{Float32}(undef, n_groups) #corpse decay rate
+    κ = Vector{Float32}(undef, n_groups)
 
     for i in 1:counts.pop
         data =  pops[i]
@@ -549,8 +549,8 @@ function premade_connections(type_c, Ni)
 end
 
 function infected_populations(input)
-    number_pops  = parse(Int64, input.Value[4]) #number of populations 
-    number_seeded = parse(Int64, input.Value[5]) #number of populations seeded with ASF
+    number_pops  = parse(Int8, input.Value[4]) #number of populations 
+    number_seeded = parse(Int8, input.Value[5]) #number of populations seeded with ASF
     con_type = input.Value[7]
 
     if (con_type == "o") & (number_pops > 1) #for runs with 2+ populations can choose what population we seed if custom
@@ -575,7 +575,7 @@ function beta_construction(sim, pops, counts, network)
 
     n_pops = counts.pop
     n_cs = counts.cum_sum
-    beta = Float64.(copy(network))
+    beta = Float32.(copy(network))
     connected_births = copy(network)
     
     connected_births[connected_births .!= 200] .= 0 #only wanted connected groups within same pop
@@ -661,9 +661,9 @@ function build_populations(sim, pops, network, counts)
     p_i = sim.N_Inf #what population seeded with ASF
     n_seed = sim.N_Seed #number of groups in said population that are seeded
     
-    y_total = Vector{Int32}(undef, N_groups*N_class) #vector to store initial populations
-    densities = Vector{Float64}(undef, N_pop) #vector to store each population's density
-    areas = Vector{Float64}(undef,N_pop) #vector to store each population's area
+    y_total = Vector{Int16}(undef, N_groups*N_class) #vector to store initial populations
+    densities = Vector{Float32}(undef, N_pop) #vector to store each population's density
+    areas = Vector{Float32}(undef,N_pop) #vector to store each population's area
     
     for i in 1:N_pop #looping through all populations
         

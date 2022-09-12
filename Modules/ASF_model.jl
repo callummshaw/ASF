@@ -38,8 +38,9 @@ function density_rate(out,u,p,t)
         beta[p.β_d .== i] .*= Density/ref_density
     end
 
-    column(i) = N .+ N[i]
-    populations  = hcat([column(i) for i=1:tp]...)
+    v = ones(Int8,tp)
+
+    populations  = v*N'+ N*v'
     populations[diagind(populations)] = N;
 
   
@@ -71,6 +72,110 @@ function density_rate(out,u,p,t)
     out[10:11:end] = Decay_C
     out[11:11:end] = W_Immunity
     
+    nothing
+end
+
+
+function density_rate_single(out,u,p,t)
+    ref_density = 3
+    u[u.<0].=0 
+    S = u[1:5:end]
+    E = u[2:5:end]
+    I = u[3:5:end]
+    R = u[4:5:end]
+    C = u[5:5:end]
+    
+   
+    
+    Pops = p.Populations
+    tp = Pops.cum_sum[end]
+    N = S + E + I + R + C .+ 0.0001
+    Np = S + E + I + R
+    v = ones(Int8,tp)
+
+    populations  = v*N'+ N*v'
+    populations[diagind(populations)] = N;
+
+    beta = copy(p.β)
+    N_feral = sum(Np)
+    Density = N_feral/Pops.area[1]
+    beta[p.β_d .== 1] .*= Density/ref_density
+
+    
+    
+    Births = p.μ_b .* Np
+    Infect = (beta .* S) * (I + p.ω .* C)#ASF Infections
+    Infectous = p.ζ .* E
+    Recover = p.γ .* (1 .- p.ρ) .* I #ASF Recoveries
+    Death_I = p.ρ .* p.γ .* I #ASF Deaths in I
+    Death_nI = p.μ_d .* I+ (p.μ_b-p.μ_d)./tanh(1).*I.*tanh.(Np./p.μ_c) #Natural Deaths in I
+    Death_S = p.μ_d .* S + (p.μ_b-p.μ_d)./tanh(1).*S.*tanh.(Np./p.μ_c) #Natural Deaths S
+    Death_E = p.μ_d .* E + (p.μ_b-p.μ_d)./tanh(1).*E.*tanh.(Np./p.μ_c)
+    Death_R = p.μ_d .* R + (p.μ_b-p.μ_d)./tanh(1).*R.*tanh.(Np./p.μ_c) #Natural Deaths R
+    Decay_C = p.λ .* C #Body Decomposition 
+    W_Immunity = p.κ .* R .* 0
+   
+    out[1:11:end] = Births
+    out[2:11:end] = Death_S
+    out[3:11:end] = Infect
+    out[4:11:end] = Death_E
+    out[5:11:end] = Infectous
+    out[6:11:end] = Death_I
+    out[7:11:end] = Death_nI
+    out[8:11:end] = Recover
+    out[9:11:end] = Death_R
+    out[10:11:end] = Decay_C
+    out[11:11:end] = W_Immunity
+    
+    nothing
+end
+
+function SEIRC_ODE!(du,u,p,t)
+    
+    ref_density = 3
+    
+    u[u.<0].=0 
+    
+    S = u[1:5:end]
+    E = u[2:5:end]
+    I = u[3:5:end]
+    R = u[4:5:end]
+    C = u[5:5:end]
+  
+    N = S + E + I + R + C .+ 0.0001
+    Np = S + E + I + R
+    
+    Pops = p.Populations 
+    
+    tp = Pops.cum_sum[end]
+
+    beta = copy(p.β)
+    
+   
+    N_feral = sum(Np) #total feral population 
+    Density = N_feral/Pops.area[1]
+    beta = beta * Density/ref_density
+ 
+
+    v = ones(Int8,tp)
+
+    populations  = v*N'+ N*v'
+    populations[diagind(populations)] = N;
+
+    connected_pops = p.β_b * Np
+
+    #procceses 
+    Births = p.μ_b .* Np
+    Births[(p.μ_c .== 1) .& (Np .> 0)] .= 0 #preventing boar populations growing larger than one!
+    Births[(Np .== 0) .& (connected_pops .>2)] .= mean(p.μ_b)*2 #allowing migration births if neighbouring groups have pop
+    
+
+    
+    du[1:5:end] = Births - ((beta.* S) ./ populations) * (I + p.ω .* C) - p.μ_d .* S + (p.μ_b-p.μ_d)./tanh(1).*S.*tanh.(Np./p.μ_c)  + p.κ .* R #S
+    du[2:5:end] = ((beta.* S) ./ populations) * (I + p.ω .* C) - p.ζ .* E - p.μ_d .* E + (p.μ_b-p.μ_d)./tanh(1).*E.*tanh.(Np./p.μ_c) #E
+    du[3:5:end] = p.ζ .* E - p.γ .* I -  p.μ_d .* I+ (p.μ_b-p.μ_d)./tanh(1).*I.*tanh.(Np./p.μ_c) #I
+    du[4:5:end] = p.γ .* (1 .- p.ρ) .* I - p.μ_d .* R + (p.μ_b-p.μ_d)./tanh(1).*R.*tanh.(Np./p.μ_c) - p.κ .* R  #R
+    du[5:5:end] = p.ρ .* p.γ .* I + p.μ_d .* I+ (p.μ_b-p.μ_d)./tanh(1).*I.*tanh.(Np./p.μ_c) - p.λ .* C#C
     nothing
 end
 
