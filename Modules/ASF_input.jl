@@ -109,7 +109,7 @@ mutable struct Network_Data
     total::Vector{Int16}
     cum_sum::Vector{Int16}
     
-    inf::Vector{Int6}
+    inf::Vector{Int8}
     
     density::Vector{Float32}
     area::Vector{Float32}
