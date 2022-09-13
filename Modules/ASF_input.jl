@@ -21,7 +21,7 @@ struct Meta_Data <: Data_Input
     using distros or just mean values for parameters, the number of 
     populations and the number of said populations seeded with ASF
     =#
-    years::Float16 #years simulation will run for
+    years::Float32 #years simulation will run for
     N_ensemble::Int16 #number of runs in an ensemble
     Identical::Bool #if we params to be drawn from dist or just means of dist
     N_Pop::Int8 #number of populations, must match the number of population files in input
@@ -48,9 +48,9 @@ end
 struct Population_Data <: Data_Input
     
     Dense::Vector{Float64} #density of population
-    N_feral::Vector{Int16} #number of feral groups
-    N_farm::Vector{Int8} #number of farm groups
-    N_int::Vector{Int8} #average interconnection between feral groups
+    N_feral::Vector{UInt16} #number of feral groups
+    N_farm::Vector{UInt8} #number of farm groups
+    N_int::Vector{UInt8} #average interconnection between feral groups
     B_f::Vector{Float64} #intra feral group transmission
     B_l::Vector{Float64} #intra farm transmission
     B_ff::Vector{Float64} #inter feral group transmission
@@ -161,7 +161,7 @@ struct Model_Data
     Structure to store key data on mode
     =#
     Time::Tuple{Float32, Float32} #Model run time
-    U0::Vector{Int32} #Initial Population
+    U0::Vector{Int16} #Initial Population
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
 
@@ -373,7 +373,7 @@ function parameter_build(sim, pops, init_pops, counts)
     γ = Vector{Float32}(undef, n_groups) #recovery/death rate
     μ_b = Vector{Float32}(undef, n_groups) #births
     μ_d = Vector{Float32}(undef, n_groups) #natural death rate
-    μ_c = Vector{Int32}(undef, n_groups) #density dependent deaths
+    μ_c = Vector{UInt8}(undef, n_groups) #density dependent deaths
     ω = Vector{Float32}(undef, n_groups) #corpse infection modifier
     ρ = Vector{Float32}(undef, n_groups) #ASF mortality
     λ = Vector{Float32}(undef, n_groups) #corpse decay rate

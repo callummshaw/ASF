@@ -39,8 +39,9 @@ function density_rate(out,u,p,t)
     end
 
     v = ones(Int8,tp)
-
+    
     populations  = v*N'+ N*v'
+   
     populations[diagind(populations)] = N;
 
   
@@ -79,18 +80,20 @@ end
 function density_rate_single(out,u,p,t)
     ref_density = 3
     u[u.<0].=0 
-    S = u[1:5:end]
-    E = u[2:5:end]
-    I = u[3:5:end]
-    R = u[4:5:end]
-    C = u[5:5:end]
+    S = Vector{UInt8}(u[1:5:end])
+    E = Vector{UInt8}(u[2:5:end])
+    I = Vector{UInt8}(u[3:5:end])
+    R = Vector{UInt8}(u[4:5:end])
+    C = Vector{UInt8}(u[5:5:end])
     
    
     
     Pops = p.Populations
     tp = Pops.cum_sum[end]
-    N = S + E + I + R + C .+ 0.0001
+    N = S + E + I + R + C
     Np = S + E + I + R
+    
+    N[N .== 0] .= 1
     v = ones(Int8,tp)
 
     populations  = v*N'+ N*v'
@@ -101,10 +104,14 @@ function density_rate_single(out,u,p,t)
     Density = N_feral/Pops.area[1]
     beta[p.β_d .== 1] .*= Density/ref_density
 
+   
     
-    
+    connected_pops = p.β_b * Np
+ 
     Births = p.μ_b .* Np
-    Infect = (beta .* S) * (I + p.ω .* C)#ASF Infections
+    Births[(p.μ_c .== 1) .& (Np .> 0)] .= 0 #preventing boar populations growing larger than one!
+    Births[(Np .== 0) .& (connected_pops .>2)] .= mean(p.μ_b)*2 #allowing migration births if neighbouring groups have pop
+    Infect = ((beta .* S) ./ populations) * (I + p.ω .* C)#ASF Infections
     Infectous = p.ζ .* E
     Recover = p.γ .* (1 .- p.ρ) .* I #ASF Recoveries
     Death_I = p.ρ .* p.γ .* I #ASF Deaths in I
@@ -114,7 +121,7 @@ function density_rate_single(out,u,p,t)
     Death_R = p.μ_d .* R + (p.μ_b-p.μ_d)./tanh(1).*R.*tanh.(Np./p.μ_c) #Natural Deaths R
     Decay_C = p.λ .* C #Body Decomposition 
     W_Immunity = p.κ .* R .* 0
-   
+  
     out[1:11:end] = Births
     out[2:11:end] = Death_S
     out[3:11:end] = Infect
@@ -195,15 +202,15 @@ function reparam!(input)
 
     # All other params
     n_groups = length(K)
-    ζ = Vector{Float64}(undef, n_groups) #latent rate
-    γ = Vector{Float64}(undef, n_groups) #recovery/death rate
-    μ_b = Vector{Float64}(undef, n_groups) #births
-    μ_d = Vector{Float64}(undef, n_groups) #natural death rate
-    μ_c = Vector{Int32}(undef, n_groups) #density dependent deaths
-    ω = Vector{Float64}(undef, n_groups) #corpse infection modifier
-    ρ = Vector{Float64}(undef, n_groups) #ASF mortality
-    λ = Vector{Float64}(undef, n_groups) #corpse decay rate
-    κ = Vector{Float64}(undef, n_groups)
+    ζ = Vector{Float32}(undef, n_groups) #latent rate
+    γ = Vector{Float32}(undef, n_groups) #recovery/death rate
+    μ_b = Vector{Float32}(undef, n_groups) #births
+    μ_d = Vector{Float32}(undef, n_groups) #natural death rate
+    μ_c = Vector{UInt8}(undef, n_groups) #density dependent deaths
+    ω = Vector{Float32}(undef, n_groups) #corpse infection modifier
+    ρ = Vector{Float32}(undef, n_groups) #ASF mortality
+    λ = Vector{Float32}(undef, n_groups) #corpse decay rate
+    κ = Vector{Float32}(undef, n_groups)
 
     for i in 1:counts.pop
         data =  pops[i]
