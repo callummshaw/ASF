@@ -226,7 +226,6 @@ function build_network(sim, pops)
 
     
         #this is where we buidl the three types of network, default is random but can allow for other network types
-
         if sim.Network == "s" #only works with even degrees 
             
             println(" Barabasi Albert Scale Free Network")
@@ -244,7 +243,8 @@ function build_network(sim, pops)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
 
-            level = 0.5
+            level = 1
+            println("Random: ", level)
             feral = watts_strogatz(nf, n_aim, level)
             
         else
@@ -392,8 +392,8 @@ function parameter_build(sim, pops, init_pops, counts)
             
             ζ[cs[i]+1:cs[i+1]] .= data.Latent[1]
             γ[cs[i]+1:cs[i+1]] .= data.Recovery[1]
-            μ_b[cs[i]+1:cs[i+1]] .= data.Births[1]
-            μ_d[cs[i]+1:cs[i+1]] .= birth_death_mod*data.Births[1]
+            μ_b[cs[i]+1:cs[i+1]] .= data.Birth[1]
+            μ_d[cs[i]+1:cs[i+1]] .= birth_death_mod*data.Birth[1]
             μ_c[cs[i]+1:cs[i+1]] = K[cs[i]+1:cs[i+1]]
             ω[cs[i]+1:cs[i+1]] .= data.Corpse[1]
             ρ[cs[i]+1:cs[i+1]] .= data.Death[1]
