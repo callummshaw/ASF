@@ -1,11 +1,11 @@
 #File for all population related parameters for simulation
 Name,Value
 #Number of years to simulate
-Years,10
+Years,5
 #Run in an ensemble? if unwanted set to 1
 N_ensemble,100
 #Param values from means or distribution
-Identical,false
+Identical,true
 #Number of Populations
 N_Pop,1
 #Number of Populations seeded with asf
@@ -18,3 +18,5 @@ C_Type,c
 C_Str,0.1
 #Network type: random(r), scale-free (s), or small-worlds (w)
 Network,w
+#Degree of network
+N_param,0.5

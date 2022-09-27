@@ -30,7 +30,8 @@ struct Meta_Data <: Data_Input
     C_Type::String #what kind of connection we want to init with between populations, line (l), circular (c), total (t), or off (o)
     C_Str::Float32 #strength of the connections between populations, note this is only for l,c,t
     Network::String #Type of network used for model random (r), scale-free (s), or small worlds (w)
-
+    N_param::Float32 #Network parameter (only for small worlds)
+    
     function Meta_Data(input, numv)
         Ny = parse(Int16, input.Value[1])
         Ne = parse(Int16,input.Value[2])
@@ -41,7 +42,8 @@ struct Meta_Data <: Data_Input
         Ct = input.Value[7]
         Cs = parse(Float32, input.Value[8])
         Nw = input.Value[9]
-        new(Ny,Ne,I,Np,Ni,Ns,Ct,Cs,Nw)
+        Nps = parse(Float32, input.Value[10])
+        new(Ny,Ne,I,Np,Ni,Ns,Ct,Cs,Nw,Nps)
     end
 end
 
@@ -243,9 +245,9 @@ function build_network(sim, pops)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
 
-            level = 1
-            println("Random: ", level)
-            feral = watts_strogatz(nf, n_aim, level)
+               
+            println("Random: ", sim.N_param)
+            feral = watts_strogatz(nf, n_aim, sim.N_param)
             
         else
             println("Erdos Renyi Random Network")
