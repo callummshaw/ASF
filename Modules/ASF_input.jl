@@ -365,7 +365,7 @@ function parameter_build(sim, pops, init_pops, counts)
     #=
     Function that builds most parameters for model
     =#
-    birth_death_mod = 0.8
+    birth_death_mod = 0.75
    
     K = init_pops[1:5:end] + init_pops[2:5:end] + init_pops[3:5:end] #carrying capacity of each group
     
@@ -659,7 +659,7 @@ function build_populations(sim, pops, network, counts)
     N_groups = n_cs[end]
 
 
-    boar = 0.2 #percentage of groups that are solitary boar
+    boar = 0.25 #percentage of groups that are solitary boar
     p_i = sim.N_Inf #what population seeded with ASF
     n_seed = sim.N_Seed #number of groups in said population that are seeded
     
