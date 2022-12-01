@@ -9,27 +9,27 @@ N_farm,0,0
 #Number of interconnection for groups within population
 N_int,8,0
 #Intra feral transmission
-B_feral,1,0.02
+B_feral,0.4,0.02
 #Intra farm transmission
 B_farm,1,0
 #Inter feral transmission
-Inter_feral,0.1,0.002
+Inter_feral,0.056,0.002
 #Farm - feral transmission
 Farm_Feral,0.01,0
 #Death Probability
-Death,0.8,0.01
+Death,0.95,0.01
 #Recovery period (days)
 Recovery,7,1
 #Latent Rate
 Latent,7,1
 #Corpse infection modifier
-Corpse,0.69,0
+Corpse,0.7,0
 #Corpse decay rate farm
 Decay_farm,1,0
 #Corpse decay rate feral
-Decay_feral,75,5
+Decay_feral,85,5
 #Feral population size
-Feral_p,4,1
+Feral_p,5,1
 #Farm population size
 Farm_p,1000,100
 #Exposed population size in seeded populations 
@@ -37,8 +37,8 @@ Exp_p,3,0
 #Infected population size in seeded populations
 Inf_p,2,0
 #Natural Birth Rate
-Birth_N,0.0015,0.0001
+Birth_N,0.0012,0.0001
 #Natural Death Rate
-Death_N,0.0007,0.0001
+Death_N,0.00065,0.0001
 #Immunity waning rate
-Immunity,10080,7
+Immunity,180,7

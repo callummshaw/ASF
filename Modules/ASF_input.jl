@@ -187,6 +187,7 @@ struct Model_Data
     
 end
 
+
 function build_network(sim, pops)
     #This function builds the network
     n_pops = sim.N_Pop #number of populations
@@ -202,7 +203,7 @@ function build_network(sim, pops)
         if data.N_feral[1] == 0
             nf = 0
         else
-            nf_d = TruncatedNormal(data.N_feral[1],data.N_feral[2],0,1000) #number of feral group distribution
+            nf_d = TruncatedNormal(data.N_feral[1],data.N_feral[2],0,10000) #number of feral group distribution
             nf = trunc(Int16,rand(nf_d))
         end
        
@@ -365,7 +366,7 @@ function parameter_build(sim, pops, init_pops, counts)
     #=
     Function that builds most parameters for model
     =#
-    birth_death_mod = 0.75
+    birth_death_mod = 0.5
    
     K = init_pops[1:5:end] + init_pops[2:5:end] + init_pops[3:5:end] #carrying capacity of each group
     
