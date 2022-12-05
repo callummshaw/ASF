@@ -48,7 +48,10 @@ struct Meta_Data <: Data_Input
 end
 
 struct Population_Data <: Data_Input
-    
+    #=
+    Structure to store parameters for each population
+    =#
+
     Dense::Vector{Float64} #density of population
     N_feral::Vector{UInt16} #number of feral groups
     N_farm::Vector{UInt8} #number of farm groups
@@ -69,11 +72,11 @@ struct Population_Data <: Data_Input
     N_i::Vector{Float64} #number of infected in seeded
     Birth::Vector{Float64} #birth rate
     Death_n::Vector{Float64} #natural death rate
-    Immunity::Vector{Float64}
+    Immunity::Vector{Float64} #immunity
 
     function Population_Data(input)
         
-        Den = [input.Mean[1],input.STD[1]]
+        Den = [input.Mean[1],input.STD[1]] 
         Nf = [input.Mean[2],input.STD[2]]
         Nl = [input.Mean[3],input.STD[3]]
         Ni = [input.Mean[4],input.STD[4]]
@@ -94,6 +97,39 @@ struct Population_Data <: Data_Input
         B = [input.Mean[19],input.STD[19]]
         Dn = [input.Mean[20],input.STD[20]]
         Im = day_to_rate(input.Mean[21],input.STD[21])
+        
+        #Here just checking the inputs to make sure they are reasonable/expected
+        if Den[1] > 10
+            @warn "High starting density of $(Den[1])"
+        end
+
+        if Ni[1] != 8
+            @warn "Mean feral connectivity of $(N[1])"
+        end 
+
+        if (Bf[1] > 1) | (Bf[1] < 0.1)
+            @warn "Inter-group transmission of $(Bf[1])"
+        end 
+
+        if (Bff[1] > .075) | (Bff[1] < 0.025)
+            @warn "Intra-group transmission of $(Bff[1])"
+        end 
+
+        if D[1] != 0.95
+            @warn "Death probability of $(D[1])"
+        end 
+
+        if (C[1] < 0.5) | (C[1]>0.9)
+            @warn "Corpse infectivity of $C[1]"
+        end 
+
+        if (Npf[1] > 15) | (Npf[1]<4)
+            @warn "Mean feral group size of $(Npf[1])"
+        end
+
+        if (B[1] > 0.002) | (B[1]< 0.001)
+            @warn "Birth rate of $(B[1])"
+        end
         
         new(Den, Nf, Nl, Ni ,Bf, Bl, Bff, Bfl, D, R, L, C, Dl, Df, Npf, Npl, Npe, Npi, B, Dn, Im)
         
@@ -187,9 +223,10 @@ struct Model_Data
     
 end
 
-
 function build_network(sim, pops)
+
     #This function builds the network
+
     n_pops = sim.N_Pop #number of populations
     network = Vector{Matrix{Int16}}(undef, n_pops) #vector to store all the 
     feral_pops = Vector{Int16}(undef, n_pops)
@@ -214,7 +251,10 @@ function build_network(sim, pops)
             nl_d = TruncatedNormal(data.N_farm[1],data.N_farm[2],0,100) #number of farms distribution
             nl =  trunc(Int16,rand(nl_d))
         end
-        
+
+        @info "$nf Feral Groups"
+        @info "$nl Farm Populations"
+
         feral_pops[pop] = nf
         farm_pops[pop] = nl
 
@@ -231,7 +271,7 @@ function build_network(sim, pops)
         #this is where we buidl the three types of network, default is random but can allow for other network types
         if sim.Network == "s" #only works with even degrees 
             
-            println(" Barabasi Albert Scale Free Network")
+            @info " Barabasi Albert Scale Free Network"
             if isodd(n_aim)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
@@ -241,17 +281,17 @@ function build_network(sim, pops)
 
         elseif sim.Network == "w" #only works with even degrees
             
-            println("Watts Strogatz Small Worlds Network")
+            @info "Watts Strogatz Small Worlds Network"
+            @info "Rho: $sim.N_param"
+
             if isodd(n_aim)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
 
-               
-            println("Random: ", sim.N_param)
             feral = watts_strogatz(nf, n_aim, sim.N_param)
             
         else
-            println("Erdos Renyi Random Network")
+            @info "Erdos Renyi Random Network"
             #using an erdos-renyi random network to determine inter-group interactions
             p_c = n_aim / n_o #probability of a connection
 
@@ -321,7 +361,6 @@ function combine_networks(network,sim, counts)
             new_link = sort([i,j]) #checking if we have already linked the two populations
 
             if new_link ∉ links
-                #println(new_link)
                 push!(links, sort([i,j])) #storing the link
                 
                 if sim.C_Type == "o" #custom strengths
@@ -356,6 +395,7 @@ function combine_networks(network,sim, counts)
 end
 
 function day_to_rate(Mean, STD)
+    #simple conversion to switch between time and rate
     mean_rate = 1/Mean
     std_rate = 1/Mean - 1/(Mean+STD)
 
@@ -681,7 +721,6 @@ function build_populations(sim, pops, network, counts)
         #vector to store  population numbers for each class of each group
         y_pop = zeros(Int32,N_class*(n_cs[i+1]-n_cs[i]))
         
-        
         N_feral = counts.feral[i] #number of feral groups 
         N_boar = round.(Int16, N_feral .* boar)#number of wild boar in pop
         N_sow = N_feral - N_boar  #number of sow groups in pop
@@ -694,8 +733,10 @@ function build_populations(sim, pops, network, counts)
         pop_network[pop_network .!= 0] .= 1 #seeting all 
         group_degree = vec(sum(Int16, pop_network, dims = 2)) .- 1 #group degree -1 as not counting inta group connections 
 
-        if sum(group_degree  .== 0) > 0
-            println("Warning ",sum(group_degree  .== 0), " disconnected feral groups!")
+        sd = sum(group_degree  .== 0)
+        
+        if sd > 0
+            @warn "$sd disconnected feral groups!"
         end
 
         #now want to choose the N_boar groups with the highest degree as these are boars, the others will be sow_dist
