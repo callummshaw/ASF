@@ -24,26 +24,55 @@ struct Meta_Data <: Data_Input
     years::Float32 #years simulation will run for
     N_ensemble::Int16 #number of runs in an ensemble
     Identical::Bool #if we params to be drawn from dist or just means of dist
+    Seasonal::Bool #If model is seasonal
     N_Pop::Int8 #number of populations, must match the number of population files in input
     N_Inf::Vector{Int8} #number of populations init with ASF
-    N_Seed::Int8
+    N_Seed::Int8 #population we will seed with
     C_Type::String #what kind of connection we want to init with between populations, line (l), circular (c), total (t), or off (o)
     C_Str::Float32 #strength of the connections between populations, note this is only for l,c,t
     Network::String #Type of network used for model random (r), scale-free (s), or small worlds (w)
     N_param::Float32 #Network parameter (only for small worlds)
     
-    function Meta_Data(input, numv)
+    function Meta_Data(input, numv, verbose)
+
         Ny = parse(Int16, input.Value[1])
         Ne = parse(Int16,input.Value[2])
         I = (input.Value[3] == "true")
-        Np = parse(Int8, input.Value[4])
+        S = (input.Value[4] == "true")
+        Np = parse(Int8, input.Value[5])
         Ni = numv
-        Ns = parse(Int16, input.Value[6])
-        Ct = input.Value[7]
-        Cs = parse(Float32, input.Value[8])
-        Nw = input.Value[9]
-        Nps = parse(Float32, input.Value[10])
-        new(Ny,Ne,I,Np,Ni,Ns,Ct,Cs,Nw,Nps)
+        Ns = parse(Int16, input.Value[7])
+        Ct = input.Value[8]
+        Cs = parse(Float32, input.Value[9])
+        Nw = input.Value[10]
+        Nps = parse(Float32, input.Value[11])
+
+        if verbose
+
+            if S
+                @info "Running with seasons"
+            end 
+
+            if Nw == "s" #only works with even degrees            
+                @info "Barabasi Albert Scale Free Network"
+            elseif Nw == "w" #only works with even degrees
+                @info "Watts Strogatz Small Worlds Network"
+                @info "Rho: $(Nps)"
+            else
+                @info "Erdos Renyi Random Network"
+            end
+              
+            if Ny > 10
+                @warn "Running for $(Ny) years"
+            end
+
+            if Ne > 100
+                @warn "Running with ensemble size of $(Ne)"
+            end
+        end
+
+        new(Ny,Ne,I,S,Np,Ni,Ns,Ct,Cs,Nw,Nps)
+        
     end
 end
 
@@ -55,86 +84,156 @@ struct Population_Data <: Data_Input
     Dense::Vector{Float64} #density of population
     N_feral::Vector{UInt16} #number of feral groups
     N_farm::Vector{UInt8} #number of farm groups
+    N_f::Vector{Float64} #feral group size
+    N_l::Vector{Float64} #farm population size
+    Boar_p::Vector{Float64} #Proportion of groups that are wild boars
     N_int::Vector{UInt8} #average interconnection between feral groups
+    N_e::Vector{Float64} #number of exposed in seeded
+    N_i::Vector{Float64} #number of infected in seeded
+    Birth::Vector{Float64} #birth rate
+    Death_p::Vector{Float64} #ratio of natural death rate to birth rate, must be less than one
+    g_fit::Vector{Float32} #fitting param to ensure stable birth/death rate
+    Death::Vector{Float64} #ASF death prob
     B_f::Vector{Float64} #intra feral group transmission
     B_l::Vector{Float64} #intra farm transmission
     B_ff::Vector{Float64} #inter feral group transmission
     B_fl::Vector{Float64} #farm-feral transmission
-    Death::Vector{Float64} #ASF death prob
-    Recovery::Vector{Float64}#Recovery rate
-    Latent::Vector{Float64} #latent period
     Corpse::Vector{Float64} #corpse infection modifier
-    Decay_l::Vector{Float64} #decay farm
-    Decay_f::Vector{Float64} #decay feral
-    N_f::Vector{Float64} #feral population size
-    N_l::Vector{Float64} #farm population size
-    N_e::Vector{Float64} #number of exposed in seeded
-    N_i::Vector{Float64} #number of infected in seeded
-    Birth::Vector{Float64} #birth rate
-    Death_n::Vector{Float64} #natural death rate
+    Latent::Vector{Float64} #latent period
+    Recovery::Vector{Float64}#Recovery rate
     Immunity::Vector{Float64} #immunity
-
-    function Population_Data(input)
-        
+    Decay_f::Vector{Float64} #decay feral
+    Decay_l::Vector{Float64} #decay farm
+    
+    function Population_Data(input, verbose)
         Den = [input.Mean[1],input.STD[1]] 
         Nf = [input.Mean[2],input.STD[2]]
         Nl = [input.Mean[3],input.STD[3]]
-        Ni = [input.Mean[4],input.STD[4]]
-        Bf = [input.Mean[5],input.STD[5]]
-        Bl = [input.Mean[6],input.STD[6]]
-        Bff = [input.Mean[7],input.STD[7]]
-        Bfl = [input.Mean[8],input.STD[8]]
-        D = [input.Mean[9],input.STD[9]]
-        R = day_to_rate(input.Mean[10],input.STD[10])
-        L = day_to_rate(input.Mean[11],input.STD[11])
-        C = [input.Mean[12],input.STD[12]]
-        Dl = day_to_rate(input.Mean[13],input.STD[13])
-        Df = day_to_rate(input.Mean[14],input.STD[14])
-        Npf = [input.Mean[15],input.STD[15]]
-        Npl = [input.Mean[16],input.STD[16]]
-        Npe = [input.Mean[17],input.STD[17]]
-        Npi = [input.Mean[18],input.STD[18]]
-        B = [input.Mean[19],input.STD[19]]
-        Dn = [input.Mean[20],input.STD[20]]
+        Sf = [input.Mean[4],input.STD[4]]
+        Sl = [input.Mean[5],input.STD[5]]
+        Br = [input.Mean[6],input.STD[6]]
+        Ni = [input.Mean[7],input.STD[7]]
+        Npe = [input.Mean[8],input.STD[8]]
+        Npi = [input.Mean[9],input.STD[9]]
+        B = [input.Mean[10],input.STD[10]]
+        Dp = [input.Mean[11],input.STD[11]]
+        Gf = [input.Mean[12],input.STD[12]]
+        D = [input.Mean[13],input.STD[13]]
+        Bf = [input.Mean[14],input.STD[14]]
+        Bl = [input.Mean[15],input.STD[15]]
+        Bff = [input.Mean[16],input.STD[16]]
+        Bfl = [input.Mean[17],input.STD[17]]
+        C = [input.Mean[18],input.STD[18]]
+        L = day_to_rate(input.Mean[19],input.STD[19])
+        R = day_to_rate(input.Mean[20],input.STD[20])
         Im = day_to_rate(input.Mean[21],input.STD[21])
+        Df = [input.Mean[22],input.STD[22]]
+        Dl = [input.Mean[23],input.STD[23]]
         
         #Here just checking the inputs to make sure they are reasonable/expected
-        if Den[1] > 10
-            @warn "High starting density of $(Den[1])"
+        if verbose 
+            if Den[1] > 10
+                @warn "High starting density of $(Den[1])"
+            end
+
+            if (Nf[1] > 1000) | (Nf[1] < 100)
+                @warn "$(Nf[1]) feral groups"
+            end 
+
+            if (Sf[1] > 25) | (Sf[1]<4)
+                @warn "Mean feral group size of $(Sf[1])"
+            end
+
+            if Br[1] != 0.25
+                @warn "Boar to group ratio of $(Br[1])"
+            end 
+
+            if Ni[1] != 8
+                @warn "Mean feral connectivity of $(Ni[1])"
+            end 
+
+            if (B[1] > 0.007) | (B[1] < 0.001)
+                @warn "Birth rate of $(B[1])"
+            end  
+
+            if Dp[1] != 0.5
+                @warn "Death to birth rate ratio of $(Dp[1])"
+            end 
+
+            if D[1] != 0.95
+                @warn "Death probability of $(D[1])"
+            end 
+
+            if (Bf[1] != 0.341) | (Bf[1] != 0.528)
+                @warn "Intra-group transmission of $(Bf[1])"
+            end 
+
+            if (Bff[1] != 0.0717) | (Bff[1] != 0.0521)
+                @warn "Inter-group transmission of $(Bff[1])"
+            end 
+
+            if (C[1] != 0.602) | (C[1] != 0.945)
+                @warn "Corpse infectivity of $(C[1])"
+            end 
+
+            if ( 0 < input.Mean[21] < 180) | (input.Mean[21] > 180)
+                @warn "Immunity period of $(input.Mean[21] )"
+            end 
+
+            if (input.Mean[22] > 80 ) | (input.Mean[22] < 14)
+                @warn "Deacy period of $(input.Mean[22])"
+            end 
+
         end
+     
+        new(Den, Nf, Nl, Sf, Sl, Br, Ni, Npe, Npi, B, Dp, Gf, D, Bf, Bl, Bff, Bfl, C, L, R, Im, Df, Dl)
 
-        if Ni[1] != 8
-            @warn "Mean feral connectivity of $(N[1])"
-        end 
-
-        if (Bf[1] > 1) | (Bf[1] < 0.1)
-            @warn "Inter-group transmission of $(Bf[1])"
-        end 
-
-        if (Bff[1] > .075) | (Bff[1] < 0.025)
-            @warn "Intra-group transmission of $(Bff[1])"
-        end 
-
-        if D[1] != 0.95
-            @warn "Death probability of $(D[1])"
-        end 
-
-        if (C[1] < 0.5) | (C[1]>0.9)
-            @warn "Corpse infectivity of $C[1]"
-        end 
-
-        if (Npf[1] > 15) | (Npf[1]<4)
-            @warn "Mean feral group size of $(Npf[1])"
-        end
-
-        if (B[1] > 0.002) | (B[1]< 0.001)
-            @warn "Birth rate of $(B[1])"
-        end
-        
-        new(Den, Nf, Nl, Ni ,Bf, Bl, Bff, Bfl, D, R, L, C, Dl, Df, Npf, Npl, Npe, Npi, B, Dn, Im)
-        
     end
     
+end
+
+struct Seasonal_effect
+    #= 
+    Structure to store key seasonal data
+    =#
+    
+    #Birth/Death effects
+    Birth_split::Float32
+    Start_day::Int8
+    Length::Int8
+
+    #Decay effects
+    Amp::Float32
+    Seasonal_offset::Float32
+
+    function Seasonal_effect(input,verbose)
+        
+        Bs = input.Value[1]
+        Sd = input.Value[2]
+        L = input.Value[3]
+        
+        A = input.Value[4]
+        So = input.Value[5]
+
+        if verbose
+            if (Bs > 1) | (Bs < 0)
+                @warn "Birth split outide of 0-1 range"
+            end
+
+            if (Sd + L) > 365
+                @warn "Split cannot go over the new year"
+            end
+
+            if A > 35
+                @warn "Large yearly range in decay times"
+            end
+        
+        end
+
+    new(Bs, Sd, L, A, So)           
+
+    end
+
 end
 
 mutable struct Network_Data
@@ -161,6 +260,7 @@ mutable struct Network_Data
 end 
 
 
+
 mutable struct Model_Parameters
     #=
     Structure to store key parameters
@@ -173,23 +273,33 @@ mutable struct Model_Parameters
     μ_b::Vector{Float32} #birth rate
     μ_d::Vector{Float32} #natural death rate
     μ_c::Vector{Int16} #carrying capicity
-    
+    g::Vector{Float32} #fitting parameter for death rate
+
     ζ::Vector{Float32} #latent rate
     γ::Vector{Float32} #recovery rate
     ω::Vector{Float32} #corpse infection modifier
     ρ::Vector{Float32} #death probability
     λ::Vector{Float32} #corpse decay rate
     κ::Vector{Float32} #loss of immunity rate
+    
+    Seasonal::Bool #if we are running with seasonality
 
+    bs::Vector{Float32}
+    sd::Vector{UInt8} 
+    l::Vector{UInt8} 
+    as::Vector{Float32}
+    so::Vector{UInt8}
+
+   
 
     Populations::Network_Data #breakdown of population
     
-    function Model_Parameters(sim, pops, U0, Populations, network)
+    function Model_Parameters(sim, pops, sea, U0, Populations, network)
         
         β, connected_pops, connected_births = beta_construction(sim, pops, Populations, network)
-        μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ, κ = parameter_build(sim, pops, U0, Populations)
+        μ_birth, μ_death, μ_capicty, g, ζ, γ, ω, ρ, λ, κ, bs, sd, l, as, so  = parameter_build(sim, pops, sea, U0, Populations)
         
-        new(β, connected_births, connected_pops, μ_birth, μ_death, μ_capicty, ζ, γ, ω, ρ, λ, κ, Populations)
+        new(β, connected_births, connected_pops, μ_birth, μ_death, μ_capicty, g, ζ, γ, ω, ρ, λ, κ, sim.Seasonal, bs, sd, l, as, so, Populations)
     end
     
 end
@@ -199,31 +309,32 @@ struct Model_Data
     Structure to store key data on mode
     =#
     Time::Tuple{Float32, Float32} #Model run time
+    NR::Int16
     U0::Vector{Int16} #Initial Population
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path)
+    function Model_Data(Path,verbose = false)
         
-        sim, pops = read_inputs(Path)
+        sim, pops, sea = read_inputs(Path, verbose)
      
         Time = (0.0,sim.years[1]*365)
        
         #now building feral pig network
-        network, counts = build_network(sim, pops) 
+        network, counts = build_network(sim, pops, verbose) 
         
         #Now using network to build init pops
         U0 = build_populations(sim, pops, network, counts) #initial populations
      
-        Parameters = Model_Parameters(sim, pops, U0, counts, network)
+        Parameters = Model_Parameters(sim, pops, sea, U0, counts, network)
         
-        new(Time, U0, Parameters, pops)
+        new(Time, sim.N_ensemble, U0, Parameters, pops)
         
     end
     
 end
 
-function build_network(sim, pops)
+function build_network(sim, pops, verbose)
 
     #This function builds the network
 
@@ -234,13 +345,16 @@ function build_network(sim, pops)
 
     for pop in 1:n_pops 
         
+        feral_max = 2500 #maximum number of feral groups, will run very slow near maximum
+        farm_max = 100 #maximum number of farm
+
         data = pops[pop]
 
         #Feral dist
         if data.N_feral[1] == 0
             nf = 0
         else
-            nf_d = TruncatedNormal(data.N_feral[1],data.N_feral[2],0,10000) #number of feral group distribution
+            nf_d = TruncatedNormal(data.N_feral[1],data.N_feral[2],0,feral_max) #number of feral group distribution
             nf = trunc(Int16,rand(nf_d))
         end
        
@@ -248,12 +362,14 @@ function build_network(sim, pops)
         if data.N_farm[1] == 0
             nl = 0
         else
-            nl_d = TruncatedNormal(data.N_farm[1],data.N_farm[2],0,100) #number of farms distribution
+            nl_d = TruncatedNormal(data.N_farm[1],data.N_farm[2],0,farm_max) #number of farms distribution
             nl =  trunc(Int16,rand(nl_d))
         end
-
-        @info "$nf Feral Groups"
-        @info "$nl Farm Populations"
+        
+        if verbose
+            @info "$nf Feral Groups"
+            @info "$nl Farm Populations"
+        end
 
         feral_pops[pop] = nf
         farm_pops[pop] = nl
@@ -268,30 +384,25 @@ function build_network(sim, pops)
         end
 
     
-        #this is where we buidl the three types of network, default is random but can allow for other network types
+        #this is where we build the three types of network, default is random but can allow for other network types
         if sim.Network == "s" #only works with even degrees 
             
-            @info " Barabasi Albert Scale Free Network"
-            if isodd(n_aim)
+            if verbose & isodd(n_aim)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
-            
             adds = n_aim ÷ 2
+
             feral = barabasi_albert(nf, adds)
 
         elseif sim.Network == "w" #only works with even degrees
             
-            @info "Watts Strogatz Small Worlds Network"
-            @info "Rho: $sim.N_param"
-
-            if isodd(n_aim)
+            if verbose & isodd(n_aim)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
 
             feral = watts_strogatz(nf, n_aim, sim.N_param)
             
         else
-            @info "Erdos Renyi Random Network"
             #using an erdos-renyi random network to determine inter-group interactions
             p_c = n_aim / n_o #probability of a connection
 
@@ -303,8 +414,9 @@ function build_network(sim, pops)
         end
         
 
-        network_feral = Matrix(adjacency_matrix(feral))*200 #inter feral = 2
-        network_feral[diagind(network_feral)] .= 100 #intra feral = 1
+        network_feral = Matrix(adjacency_matrix(feral))*200 #inter feral = 200
+        network_feral[diagind(network_feral)] .= 100 #intra feral = 100
+
         if nl != 0  #there are farm populations 
             
             N = nf + nl
@@ -315,10 +427,10 @@ function build_network(sim, pops)
 
             for i in nf+1:N
                 feral_pop = rand(1:nf) # the feral population the farm can interact within
-                network_combined[i,i] = 400 #transmission within farm pop = 4
+                network_combined[i,i] = 400 #transmission within farm pop = 400
 
-                network_combined[i,feral_pop] = 300 #feral-farm = 3
-                network_combined[feral_pop, i] = 300 #feral-farm = 3
+                network_combined[i,feral_pop] = 300 #feral-farm = 300
+                network_combined[feral_pop, i] = 300 #feral-farm = 300
 
             end
         
@@ -329,7 +441,9 @@ function build_network(sim, pops)
         end
         
     end
+
     counts = Network_Data(feral_pops,farm_pops, sim.N_Inf,[0.0],[0.0])
+    
     if n_pops > 1
         combined_network = combine_networks(network,sim,counts)
     else
@@ -402,14 +516,14 @@ function day_to_rate(Mean, STD)
     return [mean_rate, std_rate]
 end
 
-function parameter_build(sim, pops, init_pops, counts)
+function parameter_build(sim, pops, sea, init_pops, counts)
     #=
     Function that builds most parameters for model
     =#
-    birth_death_mod = 0.5
-   
-    K = init_pops[1:5:end] + init_pops[2:5:end] + init_pops[3:5:end] #carrying capacity of each group
     
+    K = init_pops[1:5:end] + init_pops[2:5:end] + init_pops[3:5:end] #carrying capacity of each group
+    n_pops = sim.N_Pop
+
     # All other params
     n_groups = length(K)
     ζ = Vector{Float32}(undef, n_groups) #latent rate
@@ -417,21 +531,52 @@ function parameter_build(sim, pops, init_pops, counts)
     μ_b = Vector{Float32}(undef, n_groups) #births
     μ_d = Vector{Float32}(undef, n_groups) #natural death rate
     μ_c = Vector{UInt8}(undef, n_groups) #density dependent deaths
+    g = Vector{Float32}(undef, n_groups)
     ω = Vector{Float32}(undef, n_groups) #corpse infection modifier
     ρ = Vector{Float32}(undef, n_groups) #ASF mortality
     λ = Vector{Float32}(undef, n_groups) #corpse decay rate
     κ = Vector{Float32}(undef, n_groups)
 
+    bs = Vector{Float32}(undef, n_pops)
+    sd = Vector{UInt8}(undef, n_pops)
+    l = Vector{UInt8}(undef, n_pops)
+    ad = Vector{Float32}(undef, n_pops)
+    so = Vector{UInt8}(undef, n_pops)
+
+
     for i in 1:counts.pop
-        data =  pops[i]
         
+        data =  pops[i]
+        data_s = sea[i]
+
         nf = counts.feral[i]
         nl = counts.farm[i]
         nt = counts.total[i]
         
         cs = counts.cum_sum
+
+        birth_death_mod = data.Death_p[1]
+        g[cs[i]+1:cs[i+1]] .= data.g_fit[1]
+
+        if sim.Seasonal
+
+            bs[i] = data_s.Birth_split
+            sd[i] = data_s.Start_day
+            l[i]  = data_s.Length
+            ad[i] = data_s.Amp
+            so[i] = data_s.Seasonal_offset
+
+        else
+
+            bs[i] = 0
+            sd[i] = 0
+            l[i]  = 0
+            ad[i] = 0
+            so[i] = 0
         
-        if sim.Identical == true #if running off means
+        end
+
+        if sim.Identical#if running off means
             
             ζ[cs[i]+1:cs[i+1]] .= data.Latent[1]
             γ[cs[i]+1:cs[i+1]] .= data.Recovery[1]
@@ -449,7 +594,6 @@ function parameter_build(sim, pops, init_pops, counts)
             ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 5) #latent dist
             γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 5) #r/d rate dist
             μ_b_d = TruncatedNormal(data.Birth[1], data.Birth[2], 0, 1) #birth dist
-            #μ_d_d = TruncatedNormal(data.Death_n[1], data.Death_n[2], 0, 1) #n death dist
             ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2], 0, 1) #corpse inf dist
             ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
             λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 1) #corpse decay feral dist
@@ -474,11 +618,11 @@ function parameter_build(sim, pops, init_pops, counts)
         
     end
 
-    return  μ_b, μ_d, μ_c, ζ, γ, ω, ρ, λ, κ
+    return  μ_b, μ_d, μ_c, g, ζ, γ, ω, ρ, λ, κ, bs, sd, l, ad, so
     
 end
 
-function read_inputs(path)
+function read_inputs(path, verbose)
     #=
     Function to read in the data for the tau simulation. Expecting a file for simulation meta data, 
     a folder with population data and another folder with seasonal data
@@ -496,18 +640,23 @@ function read_inputs(path)
     
     n_inf  = infected_populations(Simulation) #what population is seeded with ASF
         
-    Sim = Meta_Data(Simulation,n_inf)
+    Sim = Meta_Data(Simulation,n_inf, verbose)
     
     Pops = Vector{Population_Data}(undef, Sim.N_Pop)
-    #Seasons = [DataFrame() for _ in 1:Sim.N_Pop] seasons not currently in use
+    Seasons = Vector{Seasonal_effect}(undef, Sim.N_Pop)
     
     for i in 1:Sim.N_Pop
         pop_data = CSV.read("$(path)/Population/Population_$(i).csv", DataFrame; comment="#") 
-        Pops[i] = Population_Data(pop_data)
-        #Seasons[i] = CSV.read(string(path,"Seasonal/Seasonal_",i,".csv"), DataFrame; comment="#")
+        Pops[i] = Population_Data(pop_data, verbose)
+
+        if Sim.Seasonal
+            seasonal_data = CSV.read("$(path)/Seasonal/Seasonal_$(i).csv", DataFrame; comment="#")
+            Seasons[i] = Seasonal_effect(seasonal_data, verbose)
+        end
+
     end
     
-    return Sim, Pops #, Seasons
+    return Sim, Pops, Seasons
     
 end 
 
@@ -592,9 +741,9 @@ function premade_connections(type_c, Ni)
 end
 
 function infected_populations(input)
-    number_pops  = parse(Int8, input.Value[4]) #number of populations 
-    number_seeded = parse(Int8, input.Value[5]) #number of populations seeded with ASF
-    con_type = input.Value[7]
+    number_pops  = parse(Int8, input.Value[5]) #number of populations 
+    number_seeded = parse(Int8, input.Value[6]) #number of populations seeded with ASF
+    con_type = input.Value[8]
 
     if (con_type == "o") & (number_pops > 1) #for runs with 2+ populations can choose what population we seed if custom
         println("-------------------------------------")
@@ -699,8 +848,6 @@ function build_populations(sim, pops, network, counts)
     n_cs = counts.cum_sum
     N_groups = n_cs[end]
 
-
-    boar = 0.25 #percentage of groups that are solitary boar
     p_i = sim.N_Inf #what population seeded with ASF
     n_seed = sim.N_Seed #number of groups in said population that are seeded
     
@@ -708,13 +855,19 @@ function build_populations(sim, pops, network, counts)
     densities = Vector{Float32}(undef, N_pop) #vector to store each population's density
     areas = Vector{Float32}(undef,N_pop) #vector to store each population's area
     
+    max_density = 100
+    max_group_size = 100
+    min_group_size = 3
+
     for i in 1:N_pop #looping through all populations
         
         #population data
         data = pops[i]
+
+        boar = data.Boar_p[1] #percentage of groups that are solitary boar
         
         #Density of population
-        Density_D = TruncatedNormal(data.Dense[1],data.Dense[2],0,100)
+        Density_D = TruncatedNormal(data.Dense[1],data.Dense[2],0,max_density)
         Density = rand(Density_D)
         densities[i] = Density
         
@@ -726,7 +879,7 @@ function build_populations(sim, pops, network, counts)
         N_sow = N_feral - N_boar  #number of sow groups in pop
         N_farm = counts.farm[i] #number of farms in population
 
-        sow_dist = TruncatedNormal(data.N_f[1],data.N_f[2],3,500) #dist for number of pigs in sow feral group
+        sow_dist = TruncatedNormal(data.N_f[1],data.N_f[2],min_group_size, max_group_size) #dist for number of pigs in sow feral group
         sow_groups = round.(Int16,rand(sow_dist, N_sow)) #drawing the populations of each feral group in population
     
         pop_network = copy(network[n_cs[i]+1:n_cs[i+1]-N_farm,n_cs[i]+1:n_cs[i+1]-N_farm]) #isolating network for this feral pop 

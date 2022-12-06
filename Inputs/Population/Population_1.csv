@@ -6,39 +6,43 @@ Density,1,0
 N_feral,1000,0
 #Number of farms
 N_farm,0,0
+#Feral group size
+Feral_size,20,0
+#Farm size
+Farm_size,1000,100
+#Ratio of lone boars to groups
+Boar,0.25,0
 #Number of interconnection for groups within population
 N_int,8,0
-#Intra feral transmission
-B_feral,0.4,0.02
-#Intra farm transmission
-B_farm,1,0
-#Inter feral transmission
-Inter_feral,0.056,0.002
-#Farm - feral transmission
-Farm_Feral,0.01,0
-#Death Probability
-Death,0.95,0.01
-#Recovery period (days)
-Recovery,7,1
-#Latent Rate
-Latent,7,1
-#Corpse infection modifier
-Corpse,0.7,0
-#Corpse decay rate farm
-Decay_farm,1,0
-#Corpse decay rate feral
-Decay_feral,85,5
-#Feral population size
-Feral_p,5,1
-#Farm population size
-Farm_p,1000,100
 #Exposed population size in seeded populations 
 Exp_p,3,0
 #Infected population size in seeded populations
 Inf_p,2,0
 #Natural Birth Rate
 Birth_N,0.0012,0.0001
-#Natural Death Rate
-Death_N,0.00065,0.0001
+#Death to birth ratio rate, must be less than one
+Death_p,0.5,0
+#Fitting param to stabalise stochastic carrying capacity
+G_fit,20.4,0
+#Death Probability
+Death,0.9,0.01
+#Intra feral transmission
+B_feral,0.4,0.02
+#Intra farm transmission
+B_farm,1,0
+#Inter feral transmission
+Inter_feral,0.01,0.002
+#Farm - feral transmission
+Farm_Feral,0.01,0
+#Corpse infection modifier
+Corpse,0.7,0
+#Latent Rate
+Latent,7,1
+#Recovery period (days)
+Recovery,7,1
 #Immunity waning rate
 Immunity,180,7
+#Corpse decay rate feral
+Decay_feral,80,0
+#Corpse decay rate farm
+Decay_farm,1,1

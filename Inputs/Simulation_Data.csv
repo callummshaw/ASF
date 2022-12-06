@@ -6,6 +6,8 @@ Years,5
 N_ensemble,100
 #Param values from means or distribution
 Identical,true
+#Seasonal
+Seasonal,true
 #Number of Populations
 N_Pop,1
 #Number of Populations seeded with asf

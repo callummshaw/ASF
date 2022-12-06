@@ -1,12 +1,12 @@
-#File for all seasonal effects if no seasons give only values for s1 and remove other columns
-Variable,S1
-#Seasonal change in birth-rate
-Births,1
-#Seasonal change in death-rate
-Deaths,1
-#Seasonal change in population size (accounts for density effects)
-P_modifier,1
-#Seasonal change in within group transmission
-B_intra,1
-#Seasonal change in between group transmission
-B_inter,1
+#File for all seasonal effects 
+Name,Value
+#Assuming step function with two steps for births, below is percent of births that will be had during one step
+Birth_split,0.75
+#Start day of this step 0 is jan 1st...
+Birth_start,60
+#Length of this step
+Birth_length,100
+#Now looking at decay, here we have seasonal varation from mean
+Decay_amp,20
+#Now start date, offset for hemisphere, 0 is maximum (cosine function) and 182.5 is minimum
+Decay_offset,0

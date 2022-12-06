@@ -4,31 +4,43 @@ using Statistics
 using CSV
 using DelimitedFiles
 using Distributions
+using SparseArrays
 
+export asf_model
 export density_rate
 export frequency_rate
 export reparam!
 
+function asf_model_full(out,u,p,t)
 
-function density_rate(out,u,p,t)
-    ref_density = 3
-    u[u.<0].=0 
-    S = u[1:5:end]
-    E = u[2:5:end]
-    I = u[3:5:end]
-    R = u[4:5:end]
-    C = u[5:5:end]
-  
-    N = S + E + I + R + C .+ 0.0001
-    Np = S + E + I + R
+    ref_density = 1 #baseline density (from Baltics where modelled was fitted)
+    offset = 180 #seeding in the summer!
+    year = 365 #days in a year
+
+    u[u.<0] .= 0
+    
+    S = Vector{UInt8}(u[1:5:end])
+    E = Vector{UInt8}(u[2:5:end])
+    I = Vector{UInt8}(u[3:5:end])
+    R = Vector{UInt8}(u[4:5:end])
+    C = Vector{UInt8}(u[5:5:end])
+    
+
+    N = S .+ E .+ I .+ R .+ C
+    Np = S .+ E .+ I .+ R
+    
+    N[N .== 0] .= 1
     
     Pops = p.Populations 
     
-    tp = Pops.cum_sum[end]
+    tp = Pops.cum_sum[end] #total groups in all populations
 
     beta = copy(p.β)
+    μ_bb = copy(p.μ_b)
+    μ_dd = copy(p.μ_d)
+    Lambda = copy(p.λ)
 
-    for i in 1:Pops.pop
+    for i in 1:Pops.pop #going through populations
     
         nf = Pops.feral[i] #number of feral groups in region
         ncs = Pops.cum_sum[i] #cumsum of farm and ferals over all regions
@@ -36,106 +48,97 @@ function density_rate(out,u,p,t)
         Density = N_feral/Pops.area[i]
 
         beta[p.β_d .== i] .*= Density/ref_density
+
+        if p.Seasonal
+        
+            day = mod(t+offset, year)
+
+            start = p.sd[i]
+            len = p.l[i]
+            ratio = p.bs[i]
+
+            s_offset = p.so[i]
+            s_amp = p.as[i]
+
+            if  start <= day <= start + len
+                ratiob = year*ratio/len
+                
+                μ_bb[ncs+1:ncs+nf] .*= ratiob
+                μ_dd[ncs+1:ncs+nf] .*= ratiob
+                    
+            else
+                ratiob = year*(1-ratio)/(year-len)
+                
+                μ_bb[ncs+1:ncs+nf] .*= ratiob
+                μ_dd[ncs+1:ncs+nf] .*= ratiob
+            
+            end
+
+            Lambda[ncs+1:ncs+nf] .+= s_amp * cos((t + offset .+ s_offset) * 2*pi/year)
+
+        end
+
     end
 
     v = ones(Int8,tp)
     
     populations  = v*N'+ N*v'
    
-    populations[diagind(populations)] = N;
+    populations[diagind(populations)] = N
 
-  
     connected_pops = p.β_b * Np
- 
-    Births = p.μ_b .* Np
-    Births[(p.μ_c .== 1) .& (Np .> 0)] .= 0 #preventing boar populations growing larger than one!
-    Births[(Np .== 0) .& (connected_pops .>2)] .= mean(p.μ_b)*2 #allowing migration births if neighbouring groups have pop
-    Infect = ((beta .* S) ./ populations) * (I + p.ω .* C)#ASF Infections
-    Infectous = p.ζ .* E
-    Recover = p.γ .* (1 .- p.ρ) .* I #ASF Recoveries
-    Death_I = p.ρ .* p.γ .* I #ASF Deaths in I
-    Death_nI = p.μ_d .* I+ (p.μ_b-p.μ_d)./tanh(1).*I.*tanh.(Np./p.μ_c) #Natural Deaths in I
-    Death_S = p.μ_d .* S + (p.μ_b-p.μ_d)./tanh(1).*S.*tanh.(Np./p.μ_c) #Natural Deaths S
-    Death_E = p.μ_d .* E + (p.μ_b-p.μ_d)./tanh(1).*E.*tanh.(Np./p.μ_c)
-    Death_R = p.μ_d .* R + (p.μ_b-p.μ_d)./tanh(1).*R.*tanh.(Np./p.μ_c) #Natural Deaths R
-    Decay_C = p.λ .* C #Body Decomposition 
-    W_Immunity = p.κ .* R .* 0
-   
-    out[1:11:end] = Births
-    out[2:11:end] = Death_S
-    out[3:11:end] = Infect
-    out[4:11:end] = Death_E
-    out[5:11:end] = Infectous
-    out[6:11:end] = Death_I
-    out[7:11:end] = Death_nI
-    out[8:11:end] = Recover
-    out[9:11:end] = Death_R
-    out[10:11:end] = Decay_C
-    out[11:11:end] = W_Immunity
+    
+    #Setting base births
+    Births = μ_bb.*Np
+    
+    #Immigration births
+    mask_im = (Np .== 0) .& (connected_pops .>1) #population zero but connected groups have 1 or more pigs
+    Births[mask_im] .= 2*μ_bb[mask_im]
+    total_im = sum(2*μ_bb[mask_im])
+    
+    #Need to stop boars giving birth!
+    mask_boar = (p.μ_c .== 1) .& (Np .> 0) #population greater than 0 but carrying 1
+    Births[mask_boar] .= 0 #Dont want these births!
+    total_boar = sum(μ_bb[mask_boar].*Np[mask_boar]) #amount of births we have removed
+    
+    #now we need to adjust for immigration and boar births in the rest of the population
+    mask_sow = (Np .> 0) .& (p.μ_c .!= 1) #groups with pigs that are not boars!
+    Births[mask_sow] .= Births[mask_sow] .+ (total_boar-total_im)/length(Births[mask_sow])
+    
+    out[1:11:end] .= Births
+    out[2:11:end] .= S.*(μ_dd) .+ dense_deaths(μ_bb, μ_dd, p, S, Np)
+    out[3:11:end] .= ((beta .* S) ./ populations) * (I + p.ω .* C)
+    out[4:11:end] .= E.*(μ_dd) .+ dense_deaths(μ_bb, μ_dd, p, E, Np)
+    out[5:11:end] .= p.ζ .* E
+    out[6:11:end] .= p.ρ .* p.γ .* I 
+    out[7:11:end] .= I.*(μ_dd) .+ dense_deaths(μ_bb, μ_dd, p, I, Np)
+    out[8:11:end] .= p.γ .* (1 .- p.ρ) .* I
+    out[9:11:end] .= R.*(μ_dd) .+ dense_deaths(μ_bb, μ_dd, p, R, Np)
+    out[10:11:end].= (1 ./ Lambda) .* C
+    out[11:11:end] .= p.κ .* R 
     
     nothing
 end
 
 
-function density_rate_single(out,u,p,t)
-    ref_density = 3
-    u[u.<0].=0 
-    S = Vector{UInt8}(u[1:5:end])
-    E = Vector{UInt8}(u[2:5:end])
-    I = Vector{UInt8}(u[3:5:end])
-    R = Vector{UInt8}(u[4:5:end])
-    C = Vector{UInt8}(u[5:5:end])
-    
-   
-    
-    Pops = p.Populations
-    tp = Pops.cum_sum[end]
-    N = S + E + I + R + C
-    Np = S + E + I + R
-    
-    N[N .== 0] .= 1
-    v = ones(Int8,tp)
+function dense_deaths(μ_bb, μ_dd, p, U, N)
 
-    populations  = v*N'+ N*v'
-    populations[diagind(populations)] = N;
+    r = μ_bb-μ_dd
+    K = p.μ_c
+    a = p.g
 
-    beta = copy(p.β)
-    N_feral = sum(Np)
-    Density = N_feral/Pops.area[1]
-    beta[p.β_d .== 1] .*= Density/ref_density
-
-   
+    dummy = r .* U
     
-    connected_pops = p.β_b * Np
- 
-    Births = p.μ_b .* Np
-    Births[(p.μ_c .== 1) .& (Np .> 0)] .= 0 #preventing boar populations growing larger than one!
-    Births[(Np .== 0) .& (connected_pops .>2)] .= mean(p.μ_b)*2 #allowing migration births if neighbouring groups have pop
-    Infect = ((beta .* S) ./ populations) * (I + p.ω .* C)#ASF Infections
-    Infectous = p.ζ .* E
-    Recover = p.γ .* (1 .- p.ρ) .* I #ASF Recoveries
-    Death_I = p.ρ .* p.γ .* I #ASF Deaths in I
-    Death_nI = p.μ_d .* I+ (p.μ_b-p.μ_d)./tanh(1).*I.*tanh.(Np./p.μ_c) #Natural Deaths in I
-    Death_S = p.μ_d .* S + (p.μ_b-p.μ_d)./tanh(1).*S.*tanh.(Np./p.μ_c) #Natural Deaths S
-    Death_E = p.μ_d .* E + (p.μ_b-p.μ_d)./tanh(1).*E.*tanh.(Np./p.μ_c)
-    Death_R = p.μ_d .* R + (p.μ_b-p.μ_d)./tanh(1).*R.*tanh.(Np./p.μ_c) #Natural Deaths R
-    Decay_C = p.λ .* C #Body Decomposition 
-    W_Immunity = p.κ .* R .* 0
-  
-    out[1:11:end] = Births
-    out[2:11:end] = Death_S
-    out[3:11:end] = Infect
-    out[4:11:end] = Death_E
-    out[5:11:end] = Infectous
-    out[6:11:end] = Death_I
-    out[7:11:end] = Death_nI
-    out[8:11:end] = Recover
-    out[9:11:end] = Death_R
-    out[10:11:end] = Decay_C
-    out[11:11:end] = W_Immunity
+    ma = N .> K #mask above carrying
+    mb = 0 .< N .< K #mask below
+    dummy[ma].+= (a[ma].*r[ma]).*(N[ma].-K[ma]).^(1/2).*(U[ma]./N[ma]) #above carrying capacity, extra deaths
     
-    nothing
+    dummy[mb] .= -r[mb].*U[mb].*(N[mb]./K[mb]) #below carrying capacity less deaths
+    
+    return dummy
 end
+
+
 
 function SEIRC_ODE!(du,u,p,t)
     
@@ -155,6 +158,10 @@ function SEIRC_ODE!(du,u,p,t)
     Pops = p.Populations 
     
     tp = Pops.cum_sum[end]
+
+
+
+
 
     beta = copy(p.β)
     
