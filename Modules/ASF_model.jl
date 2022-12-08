@@ -6,7 +6,9 @@ using DelimitedFiles
 using Distributions
 using SparseArrays
 
-export asf_model
+export asf_model_full
+export asf_model_one
+export convert
 export density_rate
 export frequency_rate
 export reparam!
@@ -47,7 +49,7 @@ function asf_model_full(out,u,p,t)
         N_feral = sum(Np[ncs+1:ncs+nf]) #total feral population in region i
         Density = N_feral/Pops.area[i]
 
-        beta[p.β_d .== i] .*= Density/ref_density
+        beta[p.β_d .== i] .*= ((Density/ref_density).^(1/2))
 
         if p.Seasonal
         
@@ -120,6 +122,125 @@ function asf_model_full(out,u,p,t)
     nothing
 end
 
+function asf_model_one(out,u,p,t)
+    #ASF model for a single population (can make some speed increases) without farms!
+
+    β_intra, β_inter, β_c, μ_b, μ_d, μ_c, g, ζ, γ, ω, ρ, λ, κ, Sea, bs, sd, l, as, so, area = p 
+    ref_density = 1 #baseline density (from Baltics where modelled was fitted)
+    offset = 180 #seeding in the summer!
+    year = 365 #days in a year
+
+    u[u.<0] .= 0
+    
+    S = Vector{UInt8}(u[1:5:end])
+    E = Vector{UInt8}(u[2:5:end])
+    I = Vector{UInt8}(u[3:5:end])
+    R = Vector{UInt8}(u[4:5:end])
+    C = Vector{UInt8}(u[5:5:end])
+    
+
+    N = S .+ E .+ I .+ R .+ C
+    Np = S .+ E .+ I .+ R
+    
+    N[N .== 0] .= 1
+    
+    tg = length(Np) #total groups in all populations
+    tp = sum(Np) # total living pigs
+
+    Density = ((tp./area)./ref_density).^(1/2)
+
+    day = mod(t+offset, year)
+        
+    if  sd <= day <= sd + l
+
+        ratiob = year*bs/l
+        
+        μ_bb = ratiob*μ_b
+        μ_dd = ratiob*μ_b
+    
+    else    
+        ratiob = year*(1- bs)/(year-l)
+        
+        μ_bb = ratiob*μ_b
+        μ_dd = ratiob*μ_b
+    
+    end
+
+    #populations = N.*β_b + (N.*β_b)'
+    v = ones(Int8,tg)
+        
+    populations  = v*N'+ N*v'
+    connected_pops = β_c * Np
+
+    #Setting base births
+    Births = μ_bb.*Np
+
+    #Immigration births
+    mask_im = (Np .== 0) .& (connected_pops .>1) #population zero but connected groups have 1 or more pigs
+     Births[mask_im] .= 2*μ_bb[mask_im]
+    total_im = sum(2*μ_bb[mask_im])
+    
+    #Need to stop boars giving birth!
+    mask_boar = (μ_c .== 1) .& (Np .> 0) #population greater than 0 but carrying 1
+      Births[mask_boar] .= 0 #Dont want these births!
+    total_boar = sum(μ_bb[mask_boar].*Np[mask_boar]) #amount of births we have removed
+    
+    #now we need to adjust for immigration and boar births in the rest of the population
+    mask_sow = (Np .> 0) .& (μ_c .!= 1) #groups with pigs that are not boars!
+    Births[mask_sow] .+= (total_boar-total_im)/length(Births[mask_sow])
+
+    out[1:11:end] .= Births
+    out[2:11:end] .= S.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, S, Np,μ_c)
+    out[3:11:end] .=  (((Density .* β_inter .* S) ./ populations)*(I .+ ω .* C)).+ β_intra .* (S ./ N) .* (I .+ ω .* C)
+    out[4:11:end] .= E.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, E, Np,μ_c)
+    out[5:11:end] .= ζ .* E
+    out[6:11:end] .= ρ .* γ .* I 
+    out[7:11:end] .= I.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, I, Np,μ_c)
+    out[8:11:end] .= γ .* (1 .- ρ) .* I
+    out[9:11:end] .= R.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, R, Np,μ_c)
+    out[10:11:end].= (1 ./ (λ + as * cos((t + so + offset) * 2*pi/year))) .* C
+    out[11:11:end] .= κ .* R 
+
+
+    nothing
+end
+
+function convert(input)
+    
+    params = Vector{Any}(undef,20)
+    
+    beta = copy(input.β)
+    beta_con = copy(input.β_b)
+
+    params[1]  = beta[diagind(beta)]
+    params[2]  = beta.*beta_con
+    params[3]  = copy(input.β_d)
+    
+    params[4]  = copy(input.μ_b)
+    params[5]  = copy(input.μ_d)
+    params[6]  = copy(input.μ_c)
+    params[7]  = copy(input.g[1])
+
+    params[8]  = copy(input.ζ[1])
+    params[9]  = copy(input.γ[1])
+    params[10]  = copy(input.ω[1])
+    params[11] = copy(input.ρ[1])
+    params[12] = copy(input.λ[1])
+    params[13] = copy(input.κ[1])
+    
+    params[14]  = copy(input.Seasonal)
+    params[15]  = copy(input.bs[1])
+    params[16]  = copy(input.sd[1])
+    params[17] = copy(input.l[1])
+    params[18] = copy(input.as[1])
+    params[19] = copy(input.so[1])
+    
+    params[20] = copy(input.Populations.area[1])
+
+    return params
+    
+end
+
 
 function dense_deaths(μ_bb, μ_dd, p, U, N)
 
@@ -138,6 +259,20 @@ function dense_deaths(μ_bb, μ_dd, p, U, N)
     return dummy
 end
 
+function dense_deaths_one(μ_bb, μ_dd, a, U, N,μ_c)
+
+    r = μ_bb-μ_dd
+    K = μ_c
+    dummy = r .* U
+    
+    ma = N .> K #mask above carrying
+    mb = 0 .< N .< K #mask below
+    dummy[ma].+= (a*r[ma]).*(N[ma].-K[ma]).^(1/2).*(U[ma]./N[ma]) #above carrying capacity, extra deaths
+    
+     dummy[mb] .= -r[mb].*U[mb].*(N[mb]./K[mb]) #below carrying capacity less deaths
+    
+    return dummy
+end
 
 
 function SEIRC_ODE!(du,u,p,t)
@@ -158,10 +293,6 @@ function SEIRC_ODE!(du,u,p,t)
     Pops = p.Populations 
     
     tp = Pops.cum_sum[end]
-
-
-
-
 
     beta = copy(p.β)
     
