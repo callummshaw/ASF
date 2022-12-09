@@ -164,15 +164,15 @@ struct Population_Data <: Data_Input
                 @warn "Death probability of $(D[1])"
             end 
 
-            if (Bf[1] != 0.341) | (Bf[1] != 0.528)
+            if (Bf[1] != 0.462) | (Bf[1] != 0.528)
                 @warn "Intra-group transmission of $(Bf[1])"
             end 
 
-            if (Bff[1] != 0.0717) | (Bff[1] != 0.0521)
+            if (Bff[1] != 0.0634) | (Bff[1] != 0.0521)
                 @warn "Inter-group transmission of $(Bff[1])"
             end 
 
-            if (C[1] != 0.602) | (C[1] != 0.945)
+            if (C[1] != 0.847) | (C[1] != 0.945)
                 @warn "Corpse infectivity of $(C[1])"
             end 
 

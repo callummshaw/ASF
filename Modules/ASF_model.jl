@@ -6,6 +6,7 @@ using DelimitedFiles
 using Distributions
 using SparseArrays
 
+export asf_model_pop
 export asf_model_full
 export asf_model_one
 export convert
@@ -156,13 +157,13 @@ function asf_model_one(out,u,p,t)
         ratiob = year*bs/l
         
         μ_bb = ratiob*μ_b
-        μ_dd = ratiob*μ_b
+        μ_dd = ratiob*μ_d
     
     else    
         ratiob = year*(1- bs)/(year-l)
         
         μ_bb = ratiob*μ_b
-        μ_dd = ratiob*μ_b
+        μ_dd = ratiob*μ_d
     
     end
 
@@ -275,52 +276,65 @@ function dense_deaths_one(μ_bb, μ_dd, a, U, N,μ_c)
 end
 
 
-function SEIRC_ODE!(du,u,p,t)
-    
-    ref_density = 3
-    
-    u[u.<0].=0 
-    
-    S = u[1:5:end]
-    E = u[2:5:end]
-    I = u[3:5:end]
-    R = u[4:5:end]
-    C = u[5:5:end]
-  
-    N = S + E + I + R + C .+ 0.0001
-    Np = S + E + I + R
-    
-    Pops = p.Populations 
-    
-    tp = Pops.cum_sum[end]
+function asf_model_pop(out,u,p,t)
+    #ASF model for a population with no transmission! (can make some speed increases) without farms!
 
-    beta = copy(p.β)
+    β_intra, β_inter, β_c, μ_b, μ_d, μ_c, g, ζ, γ, ω, ρ, λ, κ, Sea, bs, sd, l, as, so, area = p 
+    ref_density = 1 #baseline density (from Baltics where modelled was fitted)
+    offset = 180 #seeding in the summer!
+    year = 365 #days in a year
+
+    u[u.<0] .= 0
     
-   
-    N_feral = sum(Np) #total feral population 
-    Density = N_feral/Pops.area[1]
-    beta = beta * Density/ref_density
+    S = Vector{UInt8}(u[1:5:end])
+    E = Vector{UInt8}(u[2:5:end])
+    I = Vector{UInt8}(u[3:5:end])
+    R = Vector{UInt8}(u[4:5:end])
+    C = Vector{UInt8}(u[5:5:end])
+    
+
+    N = S .+ E .+ I .+ R .+ C
+    Np = S .+ E .+ I .+ R
+    
+    N[N .== 0] .= 1
  
+    day = mod(t+offset, year)
+        
+    if  sd <= day <= sd + l
 
-    v = ones(Int8,tp)
-
-    populations  = v*N'+ N*v'
-    populations[diagind(populations)] = N;
-
-    connected_pops = p.β_b * Np
-
-    #procceses 
-    Births = p.μ_b .* Np
-    Births[(p.μ_c .== 1) .& (Np .> 0)] .= 0 #preventing boar populations growing larger than one!
-    Births[(Np .== 0) .& (connected_pops .>2)] .= mean(p.μ_b)*2 #allowing migration births if neighbouring groups have pop
+        ratiob = year*bs/l
+        
+        μ_bb = ratiob*μ_b
+        μ_dd = ratiob*μ_d
     
-
+    else    
+        ratiob = year*(1- bs)/(year-l)
+        
+        μ_bb = ratiob*μ_b
+        μ_dd = ratiob*μ_d
     
-    du[1:5:end] = Births - ((beta.* S) ./ populations) * (I + p.ω .* C) - p.μ_d .* S + (p.μ_b-p.μ_d)./tanh(1).*S.*tanh.(Np./p.μ_c)  + p.κ .* R #S
-    du[2:5:end] = ((beta.* S) ./ populations) * (I + p.ω .* C) - p.ζ .* E - p.μ_d .* E + (p.μ_b-p.μ_d)./tanh(1).*E.*tanh.(Np./p.μ_c) #E
-    du[3:5:end] = p.ζ .* E - p.γ .* I -  p.μ_d .* I+ (p.μ_b-p.μ_d)./tanh(1).*I.*tanh.(Np./p.μ_c) #I
-    du[4:5:end] = p.γ .* (1 .- p.ρ) .* I - p.μ_d .* R + (p.μ_b-p.μ_d)./tanh(1).*R.*tanh.(Np./p.μ_c) - p.κ .* R  #R
-    du[5:5:end] = p.ρ .* p.γ .* I + p.μ_d .* I+ (p.μ_b-p.μ_d)./tanh(1).*I.*tanh.(Np./p.μ_c) - p.λ .* C#C
+    end
+
+    #Setting base births
+    Births = μ_bb.*Np
+    connected_pops = β_c * Np
+    #Immigration births
+    mask_im = (Np .== 0) .& (connected_pops .>1) #population zero but connected groups have 1 or more pigs
+     Births[mask_im] .= 2*μ_bb[mask_im]
+    total_im = sum(2*μ_bb[mask_im])
+    
+    #Need to stop boars giving birth!
+    mask_boar = (μ_c .== 1) .& (Np .> 0) #population greater than 0 but carrying 1
+      Births[mask_boar] .= 0 #Dont want these births!
+    total_boar = sum(μ_bb[mask_boar].*Np[mask_boar]) #amount of births we have removed
+    
+    #now we need to adjust for immigration and boar births in the rest of the population
+    mask_sow = (Np .> 0) .& (μ_c .!= 1) #groups with pigs that are not boars!
+    Births[mask_sow] .+= (total_boar-total_im)/length(Births[mask_sow])
+
+    out[1:11:end] .= Births
+    out[2:11:end] .= S.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, S, Np,μ_c)
+    
     nothing
 end
 
