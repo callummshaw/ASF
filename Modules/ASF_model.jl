@@ -53,6 +53,7 @@ function asf_model_full(out,u,p,t)
 
         beta[p.β_d .== i] .*= ((Density/ref_density).^(p.η))
         Deaths[ncs+1:ncs+nf] *= (p.σ[i] .+ (1-p.σ[i]).*Np[ncs+1:ncs+nf].^p.θ[i].*p.K[ncs+1:ncs+nf].^(-p.θ[i]))
+        
         if p.Seasonal
 
             p_mag = birth_pulse(t, p,i)
@@ -73,19 +74,19 @@ function asf_model_full(out,u,p,t)
                 Births[mask_em] .-= extra_b ./ sum(mask_p_s)
             end
         else
-            Births *= (p.σ[i] .* Np[ncs+1:ncs+nf] .+ (1-p.σ[i]).*Np.^(1-p.θ[i]).*K[ncs+1:ncs+nf].^p.θ[i])
+            Births[ncs+1:ncs+nf] *= (p.σ[i] .* Np[ncs+1:ncs+nf] .+ (1-p.σ[i]).*Np.^(1-p.θ[i]).*K[ncs+1:ncs+nf].^p.θ[i])
 
             mask_boar = (p.K[ncs+1:ncs+nf] .== 1) .& (Np[ncs+1:ncs+nf] .> 0)
             boar_births = sum(mask_boar)
             Births[mask_boar] .= 0
             mask_p_s = (Np[ncs+1:ncs+nf] .> 1) .& (p.K[ncs+1:ncs+nf] .> 1)
-            Births[mask_p_s] .+= p_mag*boar_births ./ sum(mask_p_s) 
+            Births[mask_p_s] .+= μ_p*boar_births ./ sum(mask_p_s) 
 
             #Immigration births (only happens around pulse time with the influx of births)
             
             mask_em =  (Np[ncs+1:ncs+nf] .> 3) .& (p.K[ncs+1:ncs+nf] .> 1)
             mask_im = (Np[ncs+1:ncs+nf] .== 0) .& (connected_pops[ncs+1:ncs+nf] .> 3)
-            extra_b = sum(Births[mask_im] .= 3*p_mag)
+            extra_b = sum(Births[mask_im] .= 3*μ_p)
             Births[mask_em] .-= extra_b ./ sum(mask_p_s)
             
         end
@@ -116,7 +117,7 @@ end
 function asf_model_one(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
-    β_intra, β_inter, β_c, μ_b, μ_d, μ_c, g, ζ, γ, ω, ρ, λ, κ, Sea, bs, sd, l, as, so, area = p 
+    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area    = p 
     ref_density = 1 #baseline density (from Baltics where modelled was fitted)
     offset = 180 #seeding in the summer!
     year = 365 #days in a year
@@ -128,7 +129,6 @@ function asf_model_one(out,u,p,t)
     I = Vector{UInt8}(u[3:5:end])
     R = Vector{UInt8}(u[4:5:end])
     C = Vector{UInt8}(u[5:5:end])
-    
 
     N = S .+ E .+ I .+ R .+ C
     Np = S .+ E .+ I .+ R
@@ -138,58 +138,65 @@ function asf_model_one(out,u,p,t)
     tg = length(Np) #total groups in all populations
     tp = sum(Np) # total living pigs
 
-    Density = ((tp./area)./ref_density).^(1/2)
+    Density = ((tp/Area)/ref_density)^(η) #density of population for beta
+    connected_pops = β_b * Np
+    Deaths = μ_p*(σ .+ (1-σ).*Np.^θ.*K.^(-θ))
 
-    day = mod(t+offset, year)
-        
-    if  sd <= day <= sd + l
+    if Seasonal #running with seasons
 
-        ratiob = year*bs/l
+        Lambda = λ + la * cos((t + offset + lo) * 2*pi/year)
+
+        p_mag = birth_pulse_vector(t,k,bw,bo)
+        Births = p_mag.*(σ .* Np .+ (1-σ) .* Np.^(1-θ) .* K.^θ)
         
-        μ_bb = ratiob*μ_b
-        μ_dd = ratiob*μ_d
-    
-    else    
-        ratiob = year*(1- bs)/(year-l)
+        #now stopping boar births
+        mask_boar = (K .== 1) .& (Np .> 0)
+        boar_births = sum(mask_boar)
+        Births[mask_boar] .= 0
+        mask_p_s = (Np .> 1) .& (K .> 1)
+        Births[mask_p_s] .+= p_mag*boar_births ./ sum(mask_p_s) 
+
+        if  p_mag > mean(μ_p)
+            mask_em =  (Np .> 3) .& (K .> 1)
+            mask_im = (Np .== 0) .& (connected_pops .> 3) #population zero but connected groups have 3 or more pigs
+            extra_b = sum(Births[mask_im] .= 3*p_mag)
+            Births[mask_em] .-= extra_b ./ sum(mask_p_s)
+        end
+    else
+
+        Lambda = λ
+
+        Births = μ_p.*(σ .* Np .+ (1-σ) .* Np.^(1-θ) .* K.^θ)
+
+        mask_boar = (K .== 1) .& (Np .> 0)
+        boar_births = sum(mask_boar)
+        Births[mask_boar] .= 0
+        mask_p_s = (Np .> 1) .& (K .> 1)
+        Births[mask_p_s] .+= μ_p*boar_births ./ sum(mask_p_s) 
+
+        #Immigration births (only happens around pulse time with the influx of births)
+        mask_em =  (Np .> 3) .& (K .> 1)
+        mask_im = (Np .== 0) .& (connected_pops .> 3)
+        extra_b = sum(Births[mask_im] .= 3*μ_p)
+        Births[mask_em] .-= extra_b ./ sum(mask_p_s)
         
-        μ_bb = ratiob*μ_b
-        μ_dd = ratiob*μ_d
-    
     end
 
     #populations = N.*β_b + (N.*β_b)'
     v = ones(Int8,tg)
         
     populations  = v*N'+ N*v'
-    connected_pops = β_c * Np
-
-    #Setting base births
-    Births = μ_bb.*Np
-
-    #Immigration births
-    mask_im = (Np .== 0) .& (connected_pops .>1) #population zero but connected groups have 1 or more pigs
-     Births[mask_im] .= 2*μ_bb[mask_im]
-    total_im = sum(2*μ_bb[mask_im])
-    
-    #Need to stop boars giving birth!
-    mask_boar = (μ_c .== 1) .& (Np .> 0) #population greater than 0 but carrying 1
-      Births[mask_boar] .= 0 #Dont want these births!
-    total_boar = sum(μ_bb[mask_boar].*Np[mask_boar]) #amount of births we have removed
-    
-    #now we need to adjust for immigration and boar births in the rest of the population
-    mask_sow = (Np .> 0) .& (μ_c .!= 1) #groups with pigs that are not boars!
-    Births[mask_sow] .+= (total_boar-total_im)/length(Births[mask_sow])
 
     out[1:11:end] .= Births
-    out[2:11:end] .= S.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, S, Np,μ_c)
-    out[3:11:end] .=  (((Density .* β_inter .* S) ./ populations)*(I .+ ω .* C)).+ β_intra .* (S ./ N) .* (I .+ ω .* C)
-    out[4:11:end] .= E.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, E, Np,μ_c)
+    out[2:11:end] .= S.*Deaths
+    out[3:11:end] .=  (((Density .* β_o .* S) ./ populations)*(I .+ ω .* C)).+ β_i .* (S ./ N) .* (I .+ ω .* C)
+    out[4:11:end] .= E.*Deaths
     out[5:11:end] .= ζ .* E
     out[6:11:end] .= ρ .* γ .* I 
-    out[7:11:end] .= I.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, I, Np,μ_c)
+    out[7:11:end] .= I.*Deaths
     out[8:11:end] .= γ .* (1 .- ρ) .* I
-    out[9:11:end] .= R.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, R, Np,μ_c)
-    out[10:11:end].= (1 ./ (λ + as * cos((t + so + offset) * 2*pi/year))) .* C
+    out[9:11:end] .= R.*Deaths
+    out[10:11:end].= (1 ./ Lambda) .* C
     out[11:11:end] .= κ .* R 
 
 
@@ -197,8 +204,7 @@ function asf_model_one(out,u,p,t)
 end
 
 function convert(input)
-    
-    params = Vector{Any}(undef,20)
+    params = Vector{Any}(undef,22)
     
     beta = copy(input.β)
     beta_con = copy(input.β_b)
@@ -207,29 +213,29 @@ function convert(input)
     params[2]  = beta.*beta_con
     params[3]  = copy(input.β_d)
     
-    params[4]  = copy(input.μ_b)
-    params[5]  = copy(input.μ_d)
-    params[6]  = copy(input.μ_c)
-    params[7]  = copy(input.g[1])
-
-    params[8]  = copy(input.ζ[1])
-    params[9]  = copy(input.γ[1])
-    params[10]  = copy(input.ω[1])
-    params[11] = copy(input.ρ[1])
-    params[12] = copy(input.λ[1])
-    params[13] = copy(input.κ[1])
+    params[4]  = copy(input.μ_p)
+    params[5]  = copy(input.K)
+    params[6]  = copy(input.ζ[1])
+    params[7]  = copy(input.γ[1])
+    params[8]  = copy(input.ω[1])
+    params[9] = copy(input.ρ[1])
+    params[10] = copy(input.λ[1])
+    params[11] = copy(input.κ[1])
     
-    params[14]  = copy(input.Seasonal)
-    params[15]  = copy(input.bs[1])
-    params[16]  = copy(input.sd[1])
-    params[17] = copy(input.l[1])
-    params[18] = copy(input.as[1])
-    params[19] = copy(input.so[1])
-    
-    params[20] = copy(input.Populations.area[1])
+    params[12] = copy(input.σ[1])
+    params[13] = copy(input.θ[1])
+    params[14] = copy(input.η[1])
+    params[15] = copy(input.g[1])
 
+    params[16] = copy(input.Seasonal)
+    params[17] = copy(input.bw[1])
+    params[18] = copy(input.bo[1])
+    params[19] = copy(input.k[1])
+    params[20] = copy(input.la[1])
+    params[21] = copy(input.lo[1])
+    
+    params[22] = copy(input.Populations.area[1])
     return params
-    
 end
 
 function asf_model_pop(out,u,p,t)
