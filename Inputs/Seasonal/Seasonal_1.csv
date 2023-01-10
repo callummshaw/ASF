@@ -1,11 +1,9 @@
 #File for all seasonal effects 
 Name,Value
-#Assuming step function with two steps for births, below is percent of births that will be had during one step
-Birth_split,0.75
-#Start day of this step 0 is jan 1st...
-Birth_start,60
-#Length of this step
-Birth_length,100
+#Assuming a birth pulse for seasonal births (exp(-bw*cos(t*pi/365 +bo)^2)), variable determines width of pulse 0 is uniform births and 365 is a sharp spike
+Birth_width,5
+#Adjust peak of seasonal births...
+Birth_offset,60
 #Now looking at decay, here we have seasonal varation from mean
 Decay_amp,20
 #Now start date, offset for hemisphere, 0 is maximum (cosine function) and 182.5 is minimum

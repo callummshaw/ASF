@@ -7,10 +7,10 @@ N_feral,1000,0
 #Number of farms
 N_farm,0,0
 #Feral group size
-Feral_size,20,0
+Feral_size,5,0
 #Farm size
 Farm_size,1000,100
-#Ratio of lone boars to groups
+#Ratio of lone boars
 Boar,0.25,0
 #Number of interconnection for groups within population
 N_int,8,0
@@ -18,20 +18,22 @@ N_int,8,0
 Exp_p,3,0
 #Infected population size in seeded populations
 Inf_p,2,0
-#Natural Birth Rate
-Birth_N,0.0012,0.0001
-#Death to birth ratio rate, must be less than one
-Death_p,0.5,0
+#Natural Birth Rate (We assume at K that birth rate equals death rate)
+Birth_n,0.0011,0.0001
+#Percent of natural birth/death rates that are NOT dependent on population density
+Density_rate,0.75,0
+#Power of (K/N) or (N/K) used for density birth/death rates
+Density_power,0.5,0
 #Fitting param to stabalise stochastic carrying capacity
-G_fit,20.4,0
+G_fit,7.09,0
 #Death Probability
-Death,0.9,0.01
+Death,0.95,0.01
 #Intra feral transmission
 B_feral,0.4,0.02
 #Intra farm transmission
 B_farm,1,0
 #Inter feral transmission
-Inter_feral,0.01,0.002
+Inter_feral,0.05,0.002
 #Farm - feral transmission
 Farm_Feral,0.01,0
 #Corpse infection modifier

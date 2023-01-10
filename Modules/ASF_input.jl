@@ -9,9 +9,10 @@ using LinearAlgebra
 using NPZ
 using Random, Distributions
 using Graphs
-
+using QuadGK
 export Model_Data
 
+const year = 365 
 abstract type Data_Input end
 
 struct Meta_Data <: Data_Input
@@ -90,14 +91,16 @@ struct Population_Data <: Data_Input
     N_int::Vector{UInt8} #average interconnection between feral groups
     N_e::Vector{Float64} #number of exposed in seeded
     N_i::Vector{Float64} #number of infected in seeded
-    Birth::Vector{Float64} #birth rate
-    Death_p::Vector{Float64} #ratio of natural death rate to birth rate, must be less than one
+    Birth::Vector{Float64} #natural birth rate, at K births equal deaths
+    Density_rate::Vector{Float32} #percent of natural birth/deaths that are NOT related to population density (0-1)
+    Density_power::Vector{Float32} #power of K/N or N/K use for density birth/death rates
     g_fit::Vector{Float32} #fitting param to ensure stable birth/death rate
     Death::Vector{Float64} #ASF death prob
     B_f::Vector{Float64} #intra feral group transmission
     B_l::Vector{Float64} #intra farm transmission
     B_ff::Vector{Float64} #inter feral group transmission
     B_fl::Vector{Float64} #farm-feral transmission
+    B_Density::Vector{Float64} #density dependence of beta (0 for frequncy, 1 for density)
     Corpse::Vector{Float64} #corpse infection modifier
     Latent::Vector{Float64} #latent period
     Recovery::Vector{Float64}#Recovery rate
@@ -116,19 +119,21 @@ struct Population_Data <: Data_Input
         Npe = [input.Mean[8],input.STD[8]]
         Npi = [input.Mean[9],input.STD[9]]
         B = [input.Mean[10],input.STD[10]]
-        Dp = [input.Mean[11],input.STD[11]]
-        Gf = [input.Mean[12],input.STD[12]]
-        D = [input.Mean[13],input.STD[13]]
-        Bf = [input.Mean[14],input.STD[14]]
-        Bl = [input.Mean[15],input.STD[15]]
-        Bff = [input.Mean[16],input.STD[16]]
-        Bfl = [input.Mean[17],input.STD[17]]
-        C = [input.Mean[18],input.STD[18]]
-        L = day_to_rate(input.Mean[19],input.STD[19])
-        R = day_to_rate(input.Mean[20],input.STD[20])
-        Im = day_to_rate(input.Mean[21],input.STD[21])
-        Df = [input.Mean[22],input.STD[22]]
-        Dl = [input.Mean[23],input.STD[23]]
+        Dr = [input.Mean[11],input.STD[11]]
+        Dp = [input.Mean[12],input.STD[12]]
+        Gf = [input.Mean[13],input.STD[13]]
+        D = [input.Mean[14],input.STD[14]]
+        Bf = [input.Mean[15],input.STD[15]]
+        Bl = [input.Mean[16],input.STD[16]]
+        Bff = [input.Mean[17],input.STD[17]]
+        Bfl = [input.Mean[18],input.STD[18]]
+        Bd = [input.Mean[19],input.STD[19]]
+        C = [input.Mean[20],input.STD[20]]
+        L = day_to_rate(input.Mean[21],input.STD[21])
+        R = day_to_rate(input.Mean[22],input.STD[22])
+        Im = day_to_rate(input.Mean[23],input.STD[23])
+        Df = [input.Mean[24],input.STD[24]]
+        Dl = [input.Mean[25],input.STD[25]]
         
         #Here just checking the inputs to make sure they are reasonable/expected
         if verbose 
@@ -156,8 +161,12 @@ struct Population_Data <: Data_Input
                 @warn "Birth rate of $(B[1])"
             end  
 
-            if Dp[1] != 0.5
-                @warn "Death to birth rate ratio of $(Dp[1])"
+            if (Dr[1] > 1 ) | (Dr[1] < 0)
+                @warn "Density_rate must be between 0-1"
+            end 
+
+            if (Bd[1] > 1 ) | (Bd[1] < 0)
+                @warn "β_density outside of 0-1"
             end 
 
             if D[1] != 0.95
@@ -186,7 +195,7 @@ struct Population_Data <: Data_Input
 
         end
      
-        new(Den, Nf, Nl, Sf, Sl, Br, Ni, Npe, Npi, B, Dp, Gf, D, Bf, Bl, Bff, Bfl, C, L, R, Im, Df, Dl)
+        new(Den, Nf, Nl, Sf, Sl, Br, Ni, Npe, Npi, B, Dr, Dp, Gf, D, Bf, Bl, Bff, Bfl, Bd, C, L, R, Im, Df, Dl)
 
     end
     
@@ -197,40 +206,35 @@ struct Seasonal_effect
     Structure to store key seasonal data
     =#
     
-    #Birth/Death effects
-    Birth_split::Float32
-    Start_day::Int8
-    Length::Int8
+    #Birth/Death effects use a birth pulse, constant deaths over the year
+    Birth_width::Float32 #width of birth pulse
+    Birth_offset::Float32 #offset of birth pulse (at 0 centred at 182.5)
 
-    #Decay effects
-    Amp::Float32
-    Seasonal_offset::Float32
+    #Decay effects sine function 
+    Decay_amp::Float32 #amp of function
+    Decay_offset::Float32 #offset of decay, running with cosine so maximum at start of year (European...)
 
-    function Seasonal_effect(input,verbose)
+    function Seasonal_effect(input,pop_data,verbose)
         
-        Bs = input.Value[1]
-        Sd = input.Value[2]
-        L = input.Value[3]
+        Bw = input.Value[1]
+        Bo = input.Value[2]
         
-        A = input.Value[4]
-        So = input.Value[5]
+        Da = input.Value[3]
+        Do = input.Value[4]
+
 
         if verbose
-            if (Bs > 1) | (Bs < 0)
-                @warn "Birth split outide of 0-1 range"
+            if (Bw > 20) 
+                @warn "Very narrow birth pulse"
             end
 
-            if (Sd + L) > 365
-                @warn "Split cannot go over the new year"
-            end
-
-            if A > 35
+            if Da > 35
                 @warn "Large yearly range in decay times"
             end
         
         end
 
-    new(Bs, Sd, L, A, So)           
+    new(Bw, Bo, Da, Do)           
 
     end
 
@@ -265,16 +269,15 @@ mutable struct Model_Parameters
     #=
     Structure to store key parameters
     =#
-    
+    σ, θ, η, g, bw, bo, k, la, lo
+
     β::Matrix{Float32} #transmission matrix
     β_b::Matrix{Int16} #what feral groups are linked to each other, for births
     β_d::Matrix{Int16} #used to identify feral groups and farms for each population for density calcualtions
-    
-    μ_b::Vector{Float32} #birth rate
-    μ_d::Vector{Float32} #natural death rate
-    μ_c::Vector{Int16} #carrying capicity
-    g::Vector{Float32} #fitting parameter for death rate
 
+    μ_p::Vector{Float32} #birth/death rate at K
+    K::Vector{Int16} #carrying capicity
+   
     ζ::Vector{Float32} #latent rate
     γ::Vector{Float32} #recovery rate
     ω::Vector{Float32} #corpse infection modifier
@@ -282,24 +285,27 @@ mutable struct Model_Parameters
     λ::Vector{Float32} #corpse decay rate
     κ::Vector{Float32} #loss of immunity rate
     
+    σ::Vector{Float32} #density split
+    θ::Vector{Float32} #density power for births/deaths
+    η::Vector{Float32} #density power for transmission
+    g::Vector{Float32} #fitting param for stable populations
+
     Seasonal::Bool #if we are running with seasonality
 
-    bs::Vector{Float32}
-    sd::Vector{UInt8} 
-    l::Vector{UInt8} 
-    as::Vector{Float32}
-    so::Vector{UInt8}
-
-   
+    bw::Vector{Float32}
+    bo::Vector{UInt8} 
+    k::Vector{UInt8} 
+    la::Vector{Float32}
+    lo::Vector{UInt8}
 
     Populations::Network_Data #breakdown of population
     
     function Model_Parameters(sim, pops, sea, U0, Populations, network)
         
         β, connected_pops, connected_births = beta_construction(sim, pops, Populations, network)
-        μ_birth, μ_death, μ_capicty, g, ζ, γ, ω, ρ, λ, κ, bs, sd, l, as, so  = parameter_build(sim, pops, sea, U0, Populations)
+        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations)
         
-        new(β, connected_births, connected_pops, μ_birth, μ_death, μ_capicty, g, ζ, γ, ω, ρ, λ, κ, sim.Seasonal, bs, sd, l, as, so, Populations)
+        new(β, connected_births, connected_pops, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
     end
     
 end
@@ -528,20 +534,23 @@ function parameter_build(sim, pops, sea, init_pops, counts)
     n_groups = length(K)
     ζ = Vector{Float32}(undef, n_groups) #latent rate
     γ = Vector{Float32}(undef, n_groups) #recovery/death rate
-    μ_b = Vector{Float32}(undef, n_groups) #births
-    μ_d = Vector{Float32}(undef, n_groups) #natural death rate
-    μ_c = Vector{UInt8}(undef, n_groups) #density dependent deaths
-    g = Vector{Float32}(undef, n_groups)
+    μ_p = Vector{Float32}(undef, n_groups) #births/death rate at K
+    
     ω = Vector{Float32}(undef, n_groups) #corpse infection modifier
     ρ = Vector{Float32}(undef, n_groups) #ASF mortality
     λ = Vector{Float32}(undef, n_groups) #corpse decay rate
-    κ = Vector{Float32}(undef, n_groups)
+    κ = Vector{Float32}(undef, n_groups) #waning immunity rate
 
-    bs = Vector{Float32}(undef, n_pops)
-    sd = Vector{UInt8}(undef, n_pops)
-    l = Vector{UInt8}(undef, n_pops)
-    ad = Vector{Float32}(undef, n_pops)
-    so = Vector{UInt8}(undef, n_pops)
+    σ = Vector{Float32}(undef, n_pops) #density to non-density split for births and deaths
+    θ = Vector{Float32}(undef, n_pops) #power of density effects for births/deaths 
+    η = Vector{Float32}(undef, n_pops) #power of density effects for transmission
+    g = Vector{Float32}(undef, n_pops) #factor to allow for stable K with stochastic effects
+
+    bw = Vector{Float32}(undef, n_pops)
+    bo = Vector{Float32}(undef, n_pops)
+    k = Vector{Float32}(undef, n_pops)
+    la = Vector{Float32}(undef, n_pops)
+    lo = Vector{Float32}(undef, n_pops)
 
 
     for i in 1:counts.pop
@@ -555,34 +564,18 @@ function parameter_build(sim, pops, sea, init_pops, counts)
         
         cs = counts.cum_sum
 
-        birth_death_mod = data.Death_p[1]
-        g[cs[i]+1:cs[i+1]] .= data.g_fit[1]
+        σ[i] = data.Dr[1]
+        θ[i] = data.Dp[1]
+        η[i] = Data.Bd[1]
+        g[i] = data.g_fit[1]
 
-        if sim.Seasonal
-
-            bs[i] = data_s.Birth_split
-            sd[i] = data_s.Start_day
-            l[i]  = data_s.Length
-            ad[i] = data_s.Amp
-            so[i] = data_s.Seasonal_offset
-
-        else
-
-            bs[i] = 0
-            sd[i] = 0
-            l[i]  = 0
-            ad[i] = 0
-            so[i] = 0
-        
-        end
 
         if sim.Identical#if running off means
             
             ζ[cs[i]+1:cs[i+1]] .= data.Latent[1]
             γ[cs[i]+1:cs[i+1]] .= data.Recovery[1]
-            μ_b[cs[i]+1:cs[i+1]] .= data.Birth[1]
-            μ_d[cs[i]+1:cs[i+1]] .= birth_death_mod*data.Birth[1]
-            μ_c[cs[i]+1:cs[i+1]] = K[cs[i]+1:cs[i+1]]
+            μ_p[cs[i]+1:cs[i+1]] .= data.Birth[1]
+           
             ω[cs[i]+1:cs[i+1]] .= data.Corpse[1]
             ρ[cs[i]+1:cs[i+1]] .= data.Death[1]
             κ[cs[i]+1:cs[i+1]] .= data.Immunity[1]
@@ -593,7 +586,7 @@ function parameter_build(sim, pops, sea, init_pops, counts)
             
             ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 5) #latent dist
             γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 5) #r/d rate dist
-            μ_b_d = TruncatedNormal(data.Birth[1], data.Birth[2], 0, 1) #birth dist
+            μ_p_d = TruncatedNormal(data.Birth[1], data.Birth[2], 0, 1) #birth dist
             ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2], 0, 1) #corpse inf dist
             ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
             λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 1) #corpse decay feral dist
@@ -605,20 +598,37 @@ function parameter_build(sim, pops, sea, init_pops, counts)
             ω[cs[i]+1:cs[i+1]] = rand(ω_d,nt)
             ρ[cs[i]+1:cs[i+1]] = rand(ρ_d,nt)
             κ[cs[i]+1:cs[i+1]] = rand(κ_d,nt)
-
-            μ_b_r = rand(μ_b_d,nt) 
-            μ_b[cs[i]+1:cs[i+1]] = μ_b_r
-            μ_d[cs[i]+1:cs[i+1]] = birth_death_mod*μ_b_r
-            μ_c[cs[i]+1:cs[i+1]] = K[cs[i]+1:cs[i+1]]
+            μ_p[cs[i]+1:cs[i+1]] =  rand(μ_p_d,nt) 
+          
+           
 
             λ[cs[i]+1:cs[i]+nf] .= rand(λ_fd,nf)
             λ[cs[i]+nf+1:cs[i+1]] .= rand(λ_ld,nl)
 
         end
+
+        if sim.Seasonal
+
+            bw[i] = data_s.Birth_width
+            bo[i] = data_s.Birth_offset
+            la[i] = data_s.Decay_amp
+            lo[i] = data_s.Decay_offset
+
+            k[i]  = birthpulse_norm(data_s.Birth_width, mean(μ_p[cs[i]+1:cs[i+1]]))
+
+        else
+
+            bw[i] = 0
+            bo[i] = 0
+            k[i]  = 0
+            la[i] = 0
+            lo[i] = 0
+
+        end
         
     end
 
-    return  μ_b, μ_d, μ_c, g, ζ, γ, ω, ρ, λ, κ, bs, sd, l, ad, so
+    return  μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, bw, bo, k, la, lo
     
 end
 
@@ -651,7 +661,7 @@ function read_inputs(path, verbose)
 
         if Sim.Seasonal
             seasonal_data = CSV.read("$(path)/Seasonal/Seasonal_$(i).csv", DataFrame; comment="#")
-            Seasons[i] = Seasonal_effect(seasonal_data, verbose)
+            Seasons[i] = Seasonal_effect(seasonal_data, Pops[i], verbose)
         end
 
     end
@@ -967,6 +977,14 @@ function build_populations(sim, pops, network, counts)
     counts.area = areas
     return trunc.(Int,y_total)
     
+end
+
+function birthpulse_norm(s, DT)
+   
+    integral, err = quadgk(x -> exp(-s*cos(pi*x/year)^2), 1, year, rtol=1e-8);
+    k = DT/integral 
+    
+    return k
 end
 
 end

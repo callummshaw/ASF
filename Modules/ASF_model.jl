@@ -39,9 +39,10 @@ function asf_model_full(out,u,p,t)
     tp = Pops.cum_sum[end] #total groups in all populations
 
     beta = copy(p.β)
-    μ_bb = copy(p.μ_b)
-    μ_dd = copy(p.μ_d)
+    Births = copy(p.μ_p)
+    Deaths = copy(p.μ_p)
     Lambda = copy(p.λ)
+    connected_pops = p.β_b * Np
 
     for i in 1:Pops.pop #going through populations
     
@@ -50,35 +51,43 @@ function asf_model_full(out,u,p,t)
         N_feral = sum(Np[ncs+1:ncs+nf]) #total feral population in region i
         Density = N_feral/Pops.area[i]
 
-        beta[p.β_d .== i] .*= ((Density/ref_density).^(1/2))
-
+        beta[p.β_d .== i] .*= ((Density/ref_density).^(p.η))
+        Deaths[ncs+1:ncs+nf] *= (p.σ[i] .+ (1-p.σ[i]).*Np[ncs+1:ncs+nf].^p.θ[i].*p.K[ncs+1:ncs+nf].^(-p.θ[i]))
         if p.Seasonal
+
+            p_mag = birth_pulse(t, p,i)
+            Births[ncs+1:ncs+nf] = p_mag.*(p.σ[i] .* Np[ncs+1:ncs+nf] .+ (1-p.σ[i]).*Np[ncs+1:ncs+nf].^(1-p.θ[i]).*p.K[ncs+1:ncs+nf].^p.θ[i])
+            Lambda[ncs+1:ncs+nf] .+= p.la[i] * cos((t + offset + p.lo[i]) * 2*pi/year)
         
-            day = mod(t+offset, year)
+            #now stopping boar births
+            mask_boar = (p.K[ncs+1:ncs+nf] .== 1) .& (Np[ncs+1:ncs+nf] .> 0)
+            boar_births = sum(mask_boar)
+            Births[mask_boar] .= 0
+            mask_p_s = (Np[ncs+1:ncs+nf] .> 1) .& (p.K[ncs+1:ncs+nf] .> 1)
+            Births[mask_p_s] .+= p_mag*boar_births ./ sum(mask_p_s) 
 
-            start = p.sd[i]
-            len = p.l[i]
-            ratio = p.bs[i]
-
-            s_offset = p.so[i]
-            s_amp = p.as[i]
-
-            if  start <= day <= start + len
-                ratiob = year*ratio/len
-                
-                μ_bb[ncs+1:ncs+nf] .*= ratiob
-                μ_dd[ncs+1:ncs+nf] .*= ratiob
-                    
-            else
-                ratiob = year*(1-ratio)/(year-len)
-                
-                μ_bb[ncs+1:ncs+nf] .*= ratiob
-                μ_dd[ncs+1:ncs+nf] .*= ratiob
-            
+            if  p_mag > mean(p.μ_p[ncs+1:ncs+nf])
+                mask_em =  (Np[ncs+1:ncs+nf] .> 3) .& (p.K[ncs+1:ncs+nf] .> 1)
+                mask_im = (Np[ncs+1:ncs+nf] .== 0) .& (connected_pops[ncs+1:ncs+nf] .> 3) #population zero but connected groups have 3 or more pigs
+                extra_b = sum(Births[mask_im] .= 3*p_mag)
+                Births[mask_em] .-= extra_b ./ sum(mask_p_s)
             end
+        else
+            Births *= (p.σ[i] .* Np[ncs+1:ncs+nf] .+ (1-p.σ[i]).*Np.^(1-p.θ[i]).*K[ncs+1:ncs+nf].^p.θ[i])
 
-            Lambda[ncs+1:ncs+nf] .+= s_amp * cos((t + offset .+ s_offset) * 2*pi/year)
+            mask_boar = (p.K[ncs+1:ncs+nf] .== 1) .& (Np[ncs+1:ncs+nf] .> 0)
+            boar_births = sum(mask_boar)
+            Births[mask_boar] .= 0
+            mask_p_s = (Np[ncs+1:ncs+nf] .> 1) .& (p.K[ncs+1:ncs+nf] .> 1)
+            Births[mask_p_s] .+= p_mag*boar_births ./ sum(mask_p_s) 
 
+            #Immigration births (only happens around pulse time with the influx of births)
+            
+            mask_em =  (Np[ncs+1:ncs+nf] .> 3) .& (p.K[ncs+1:ncs+nf] .> 1)
+            mask_im = (Np[ncs+1:ncs+nf] .== 0) .& (connected_pops[ncs+1:ncs+nf] .> 3)
+            extra_b = sum(Births[mask_im] .= 3*p_mag)
+            Births[mask_em] .-= extra_b ./ sum(mask_p_s)
+            
         end
 
     end
@@ -88,35 +97,16 @@ function asf_model_full(out,u,p,t)
     populations  = v*N'+ N*v'
    
     populations[diagind(populations)] = N
-
-    connected_pops = p.β_b * Np
-    
-    #Setting base births
-    Births = μ_bb.*Np
-    
-    #Immigration births
-    mask_im = (Np .== 0) .& (connected_pops .>1) #population zero but connected groups have 1 or more pigs
-    Births[mask_im] .= 2*μ_bb[mask_im]
-    total_im = sum(2*μ_bb[mask_im])
-    
-    #Need to stop boars giving birth!
-    mask_boar = (p.μ_c .== 1) .& (Np .> 0) #population greater than 0 but carrying 1
-    Births[mask_boar] .= 0 #Dont want these births!
-    total_boar = sum(μ_bb[mask_boar].*Np[mask_boar]) #amount of births we have removed
-    
-    #now we need to adjust for immigration and boar births in the rest of the population
-    mask_sow = (Np .> 0) .& (p.μ_c .!= 1) #groups with pigs that are not boars!
-    Births[mask_sow] .= Births[mask_sow] .+ (total_boar-total_im)/length(Births[mask_sow])
     
     out[1:11:end] .= Births
-    out[2:11:end] .= S.*(μ_dd) .+ dense_deaths(μ_bb, μ_dd, p, S, Np)
+    out[2:11:end] .= S.*Deaths
     out[3:11:end] .= ((beta .* S) ./ populations) * (I + p.ω .* C)
-    out[4:11:end] .= E.*(μ_dd) .+ dense_deaths(μ_bb, μ_dd, p, E, Np)
+    out[4:11:end] .= E.*Deaths
     out[5:11:end] .= p.ζ .* E
     out[6:11:end] .= p.ρ .* p.γ .* I 
-    out[7:11:end] .= I.*(μ_dd) .+ dense_deaths(μ_bb, μ_dd, p, I, Np)
+    out[7:11:end] .= I.*Deaths
     out[8:11:end] .= p.γ .* (1 .- p.ρ) .* I
-    out[9:11:end] .= R.*(μ_dd) .+ dense_deaths(μ_bb, μ_dd, p, R, Np)
+    out[9:11:end] .= R.*Deaths
     out[10:11:end].= (1 ./ Lambda) .* C
     out[11:11:end] .= p.κ .* R 
     
@@ -242,40 +232,6 @@ function convert(input)
     
 end
 
-
-function dense_deaths(μ_bb, μ_dd, p, U, N)
-
-    r = μ_bb-μ_dd
-    K = p.μ_c
-    a = p.g
-
-    dummy = r .* U
-    
-    ma = N .> K #mask above carrying
-    mb = 0 .< N .< K #mask below
-    dummy[ma].+= (a[ma].*r[ma]).*(N[ma].-K[ma]).^(1/2).*(U[ma]./N[ma]) #above carrying capacity, extra deaths
-    
-    dummy[mb] .= -r[mb].*U[mb].*(N[mb]./K[mb]) #below carrying capacity less deaths
-    
-    return dummy
-end
-
-function dense_deaths_one(μ_bb, μ_dd, a, U, N,μ_c)
-
-    r = μ_bb-μ_dd
-    K = μ_c
-    dummy = r .* U
-    
-    ma = N .> K #mask above carrying
-    mb = 0 .< N .< K #mask below
-    dummy[ma].+= (a*r[ma]).*(N[ma].-K[ma]).^(1/2).*(U[ma]./N[ma]) #above carrying capacity, extra deaths
-    
-     dummy[mb] .= -r[mb].*U[mb].*(N[mb]./K[mb]) #below carrying capacity less deaths
-    
-    return dummy
-end
-
-
 function asf_model_pop(out,u,p,t)
     #ASF model for a population with no transmission! (can make some speed increases) without farms!
 
@@ -336,6 +292,14 @@ function asf_model_pop(out,u,p,t)
     out[2:11:end] .= S.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, S, Np,μ_c)
     
     nothing
+end
+
+function birth_pulse(t, p, i)
+    return p.k*exp(-p.bw[i]*cos(pi*t/365 + p.bo[i])^2)
+end
+
+function birth_pulse_vector(t,k,s,p)
+    return k*exp(-s*cos(pi*t/365 + p)^2)
 end
 
 function reparam!(input)
