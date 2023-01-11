@@ -269,8 +269,6 @@ mutable struct Model_Parameters
     #=
     Structure to store key parameters
     =#
-    σ, θ, η, g, bw, bo, k, la, lo
-
     β::Matrix{Float32} #transmission matrix
     β_b::Matrix{Int16} #what feral groups are linked to each other, for births
     β_d::Matrix{Int16} #used to identify feral groups and farms for each population for density calcualtions
@@ -294,7 +292,7 @@ mutable struct Model_Parameters
 
     bw::Vector{Float32}
     bo::Vector{UInt8} 
-    k::Vector{UInt8} 
+    k::Vector{Float32} 
     la::Vector{Float32}
     lo::Vector{UInt8}
 
@@ -563,10 +561,10 @@ function parameter_build(sim, pops, sea, init_pops, counts)
         nt = counts.total[i]
         
         cs = counts.cum_sum
-
-        σ[i] = data.Dr[1]
-        θ[i] = data.Dp[1]
-        η[i] = Data.Bd[1]
+        
+        σ[i] = data.Density_rate[1]
+        θ[i] = data.Density_power[1]
+        η[i] = data.B_Density[1]
         g[i] = data.g_fit[1]
 
 
@@ -982,7 +980,7 @@ end
 function birthpulse_norm(s, DT)
    
     integral, err = quadgk(x -> exp(-s*cos(pi*x/year)^2), 1, year, rtol=1e-8);
-    k = DT/integral 
+    k = (year*DT)/integral 
     
     return k
 end

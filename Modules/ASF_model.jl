@@ -301,11 +301,11 @@ function asf_model_pop(out,u,p,t)
 end
 
 function birth_pulse(t, p, i)
-    return p.k*exp(-p.bw[i]*cos(pi*t/365 + p.bo[i])^2)
+    return p.k*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2)
 end
 
 function birth_pulse_vector(t,k,s,p)
-    return k*exp(-s*cos(pi*t/365 + p)^2)
+    return k*exp(-s*cos(pi*(t+p)/365)^2)
 end
 
 function reparam!(input)
