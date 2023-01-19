@@ -1,7 +1,7 @@
 #File for all seasonal effects 
 Name,Value
 #Assuming a birth pulse for seasonal births (exp(-bw*cos(t*pi/365 +bo)^2)), variable determines width of pulse 0 is uniform births and 365 is a sharp spike
-Birth_width,10
+Birth_width,3
 #Adjust peak of seasonal births...
 Birth_offset,75
 #Now looking at decay, here we have seasonal varation from mean

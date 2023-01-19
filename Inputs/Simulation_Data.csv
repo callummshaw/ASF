@@ -13,7 +13,7 @@ N_Pop,1
 #Number of Populations seeded with asf
 N_Inf,1
 #Number of groups in population seeded with asf
-N_Seed,20
+N_Seed,5
 #Connection Type- for 2+ groups can have automatic connections between populations- line (l), circular (c), total (t), or off (o)
 C_Type,c
 #Connection Strength- for inbuilt sims, this is the connection strength between populations
@@ -21,4 +21,4 @@ C_Str,0.1
 #Network type: random(r), scale-free (s), or small-worlds (w)
 Network,w
 #Degree of network
-N_param,0.2
+N_param,0.15
