@@ -11,7 +11,7 @@ Feral_size,5,0
 #Farm size
 Farm_size,1000,100
 #Ratio of lone boars
-Boar,0.25,0
+Boar,0.2,0
 #Number of interconnection for groups within population
 N_int,8,0
 #Exposed population size in seeded populations 
@@ -33,13 +33,13 @@ B_feral,0.535,0.02
 #Intra farm transmission
 B_farm,1,0
 #Inter feral transmission
-Inter_feral,0.04,0.002
+Inter_feral,0.035,0.002
 #Farm - feral transmission
 Farm_Feral,0.01,0
 #Power for density transmission (0 is frequency based and 1 is pure density)
 Density_t,0.5,0
 #Corpse infection modifier
-Corpse,0.85,0
+Corpse,0.65,0
 #Latent Rate
 Latent,7,1
 #Recovery period (days)
