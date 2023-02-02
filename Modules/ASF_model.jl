@@ -119,7 +119,6 @@ function asf_model_one(out,u,p,t)
 
     β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area    = p 
     ref_density = 1 #baseline density (from Baltics where modelled was fitted)
-    offset = 180 #seeding in the summer!
     year = 365 #days in a year
 
     u[u.<0] .= 0
@@ -138,54 +137,50 @@ function asf_model_one(out,u,p,t)
     tg = length(Np) #total groups in all populations
     tp = sum(Np) # total living pigs
 
-    Density = ((tp/Area)/ref_density)^(η) #density of population for beta
-    connected_pops = β_b * Np
-    Deaths = μ_p*(σ .+ (1-σ).*Np.^θ.*K.^(-θ))
+    Density = sqrt((tp/Area)/ref_density) #density of population for beta
+    Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(Np)./sqrt.(K))*0.95
+    
 
-    if Seasonal #running with seasons
+    Lambda = λ + la * cos((t + lo) * 2*pi/year)
 
-        Lambda = λ + la * cos((t + offset + lo) * 2*pi/year)
-
-        p_mag = birth_pulse_vector(t,k,bw,bo)
-        Births = p_mag.*(σ .* Np .+ (1-σ) .* Np.^(1-θ) .* K.^θ)
+    p_mag = birth_pulse_vector(t,k,bw,bo)
+    Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(Np .* K))#Np.^(1-θ) .* K.^θ)
+    
+    #now stopping boar births
+    mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
+    boar_births = p_mag*sum(mask_boar)
+    Births[mask_boar] .= 0
+    mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive 
+    Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
+     
+    
+    n_empty  = sum(Np .== 0 )   
+    
+    if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
         
-        #now stopping boar births
-        mask_boar = (K .== 1) .& (Np .> 0)
-        boar_births = sum(mask_boar)
-        Births[mask_boar] .= 0
-        mask_p_s = (Np .> 1) .& (K .> 1)
-        Births[mask_p_s] .+= p_mag*boar_births ./ sum(mask_p_s) 
-
-        if  p_mag > mean(μ_p)
-            mask_em =  (Np .> 3) .& (K .> 1)
-            mask_im = (Np .== 0) .& (connected_pops .> 3) #population zero but connected groups have 3 or more pigs
-            extra_b = sum(Births[mask_im] .= 3*p_mag)
-            Births[mask_em] .-= extra_b ./ sum(mask_p_s)
-        end
-    else
-
-        Lambda = λ
-
-        Births = μ_p.*(σ .* Np .+ (1-σ) .* Np.^(1-θ) .* K.^θ)
-
-        mask_boar = (K .== 1) .& (Np .> 0)
-        boar_births = sum(mask_boar)
-        Births[mask_boar] .= 0
-        mask_p_s = (Np .> 1) .& (K .> 1)
-        Births[mask_p_s] .+= μ_p*boar_births ./ sum(mask_p_s) 
-
-        #Immigration births (only happens around pulse time with the influx of births)
-        mask_em =  (Np .> 3) .& (K .> 1)
-        mask_im = (Np .== 0) .& (connected_pops .> 3)
-        extra_b = sum(Births[mask_im] .= 3*μ_p)
-        Births[mask_em] .-= extra_b ./ sum(mask_p_s)
+        n_r = (n_empty/tg)^2
         
+        dd = copy(Np)
+        dd[dd .< 2] .= 0
+        connected_pops = β_b * dd
+
+            #Groups with 3 or more pigs can have emigration
+        mask_em =  (dd .> 0) #populations that will have emigration
+
+        em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
+
+        mask_im = (Np .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
+
+        Births[mask_em] .*= n_r
+        Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
+
     end
-
-    #populations = N.*β_b + (N.*β_b)'
+    
     v = ones(Int8,tg)
         
     populations  = v*N'+ N*v'
+    
+    populations[diagind(populations)] = N
 
     out[1:11:end] .= Births
     out[2:11:end] .= S.*Deaths
@@ -239,64 +234,53 @@ function convert(input)
 end
 
 function asf_model_pop(out,u,p,t)
-    #ASF model for a population with no transmission! (can make some speed increases) without farms!
+    #ASF model for a single population (can make some speed increases) without farms!
 
-    β_intra, β_inter, β_c, μ_b, μ_d, μ_c, g, ζ, γ, ω, ρ, λ, κ, Sea, bs, sd, l, as, so, area = p 
-    ref_density = 1 #baseline density (from Baltics where modelled was fitted)
-    offset = 180 #seeding in the summer!
+    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area  = p 
+    
+    
     year = 365 #days in a year
 
     u[u.<0] .= 0
     
-    S = Vector{UInt8}(u[1:5:end])
-    E = Vector{UInt8}(u[2:5:end])
-    I = Vector{UInt8}(u[3:5:end])
-    R = Vector{UInt8}(u[4:5:end])
-    C = Vector{UInt8}(u[5:5:end])
+    S = Vector{UInt32}(u[1:5:end])
     
-
-    N = S .+ E .+ I .+ R .+ C
-    Np = S .+ E .+ I .+ R
+    tg = length(S)
     
-    N[N .== 0] .= 1
- 
-    day = mod(t+offset, year)
+    p_mag = birth_pulse_vector(t,k,bw,0)
+    Births = p_mag.*(σ .* S .+ ((1-σ)) .* sqrt.(S .* K))#S.^(1-θ) .* K.^θ)
+    
+    #now stopping boar births
+    mask_boar = (K .== 1) .& (S .> 0) #boars with a positive population
+    boar_births = p_mag*sum(mask_boar)
+    Births[mask_boar] .= 0
+    mask_p_s = (S .> 1) .& (K .> 1) #moving it to postive 
+    Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
+     
+    
+    n_empty  = sum(S .== 0 ) 
+    n_r = (n_empty/tg)^2
+    
+    
+    if (n_empty/tg) > 0.01
         
-    if  sd <= day <= sd + l
+        dd = copy(S)
+        dd[dd .< 2] .= 0
+        connected_pops = β_b * dd
 
-        ratiob = year*bs/l
-        
-        μ_bb = ratiob*μ_b
-        μ_dd = ratiob*μ_d
-    
-    else    
-        ratiob = year*(1- bs)/(year-l)
-        
-        μ_bb = ratiob*μ_b
-        μ_dd = ratiob*μ_d
-    
-    end
+            #Groups with 3 or more pigs can have emigration
+        mask_em =  (dd .> 0) #populations that will have emigration
 
-    #Setting base births
-    Births = μ_bb.*Np
-    connected_pops = β_c * Np
-    #Immigration births
-    mask_im = (Np .== 0) .& (connected_pops .>1) #population zero but connected groups have 1 or more pigs
-     Births[mask_im] .= 2*μ_bb[mask_im]
-    total_im = sum(2*μ_bb[mask_im])
-    
-    #Need to stop boars giving birth!
-    mask_boar = (μ_c .== 1) .& (Np .> 0) #population greater than 0 but carrying 1
-      Births[mask_boar] .= 0 #Dont want these births!
-    total_boar = sum(μ_bb[mask_boar].*Np[mask_boar]) #amount of births we have removed
-    
-    #now we need to adjust for immigration and boar births in the rest of the population
-    mask_sow = (Np .> 0) .& (μ_c .!= 1) #groups with pigs that are not boars!
-    Births[mask_sow] .+= (total_boar-total_im)/length(Births[mask_sow])
+        em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
 
+        mask_im = (S .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
+
+        Births[mask_em] .*= n_r
+        Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
+    end 
     out[1:11:end] .= Births
-    out[2:11:end] .= S.*(μ_dd) .+ dense_deaths_one(μ_bb, μ_dd, g, S, Np,μ_c)
-    
+    out[2:11:end] .= S.*μ_p.*(σ .+ (1-σ).*sqrt.(S./K))*g
+   
     nothing
 end
 
