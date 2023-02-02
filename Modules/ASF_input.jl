@@ -318,14 +318,14 @@ struct Model_Data
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path,verbose = false)
+    function Model_Data(Path, XN, verbose = false)
         
         sim, pops, sea = read_inputs(Path, verbose)
      
         Time = (0.0,sim.years[1]*365)
        
         #now building feral pig network
-        network, counts = build_network(sim, pops, verbose) 
+        network, counts = build_network(sim, pops, verbose, XN) 
         
         #Now using network to build init pops
         U0 = build_populations(sim, pops, network, counts) #initial populations
@@ -338,7 +338,7 @@ struct Model_Data
     
 end
 
-function build_network(sim, pops, verbose)
+function build_network(sim, pops, verbose, XN)
 
     #This function builds the network
 
@@ -404,7 +404,7 @@ function build_network(sim, pops, verbose)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
 
-            feral = watts_strogatz(nf, n_aim, sim.N_param)
+            feral = watts_strogatz(nf, n_aim, XN)#sim.N_param)
             
         else
             #using an erdos-renyi random network to determine inter-group interactions

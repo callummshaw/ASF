@@ -21,4 +21,4 @@ C_Str,0.1
 #Network type: random(r), scale-free (s), or small-worlds (w)
 Network,w
 #Degree of network
-N_param,0.15
+N_param,0.21

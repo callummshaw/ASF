@@ -5,6 +5,6 @@ Birth_width,3
 #Adjust peak of seasonal births...
 Birth_offset,75
 #Now looking at decay, here we have seasonal varation from mean
-Decay_amp,20
+Decay_amp,30
 #Now start date, offset for hemisphere, 0 is maximum (cosine function) and 182.5 is minimum
 Decay_offset,0
