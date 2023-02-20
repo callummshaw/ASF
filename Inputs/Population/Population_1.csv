@@ -25,21 +25,21 @@ Density_rate,0.75,0
 #Power of (K/N) or (N/K) used for density birth/death rates
 Density_power,0.5,0
 #Fitting param to stabalise stochastic carrying capacity
-G_fit,0.927,0
+G_fit,0.9418,0
 #Death Probability
 Death,0.95,0.01
 #Intra feral transmission
-B_feral,0.532,0.02
+B_feral,0.666,0.02
 #Intra farm transmission
 B_farm,1,0
 #Inter feral transmission
-Inter_feral,0.0514,0.002
+Inter_feral,0.0451,0.002
 #Farm - feral transmission
 Farm_Feral,0.01,0
 #Power for density transmission (0 is frequency based and 1 is pure density)
 Density_t,0.4,0
 #Corpse infection modifier
-Corpse,0.5411,0
+Corpse,0.505,0
 #Latent Rate
 Latent,7,1
 #Recovery period (days)
