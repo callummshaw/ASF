@@ -22,3 +22,5 @@ C_Str,0.1
 Network,w
 #Degree of network
 N_param,0.21
+#Starting Date (1-365,  where jan 1st = 1 etc.)
+S_Day,180

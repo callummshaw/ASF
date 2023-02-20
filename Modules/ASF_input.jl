@@ -1,15 +1,11 @@
 module ASF_Inputs
 
 using LinearAlgebra
-using DelimitedFiles
-using DataFrames
-using CSV
-using FileIO
-using LinearAlgebra
-using NPZ
-using Random, Distributions
+using Distributions
 using Graphs
 using QuadGK
+using CSV
+using DataFrames
 export Model_Data
 
 const year = 365 
@@ -23,6 +19,7 @@ struct Meta_Data <: Data_Input
     populations and the number of said populations seeded with ASF
     =#
     years::Float32 #years simulation will run for
+    S_day::Int16 #starting date of simulation
     N_ensemble::Int16 #number of runs in an ensemble
     Identical::Bool #if we params to be drawn from dist or just means of dist
     Seasonal::Bool #If model is seasonal
@@ -38,16 +35,17 @@ struct Meta_Data <: Data_Input
 
         Ny = parse(Int16, input.Value[1])
         Ne = parse(Int16,input.Value[2])
-        I = (input.Value[3] == "true")
-        S = (input.Value[4] == "true")
+        I  = (input.Value[3] == "true")
+        S  = (input.Value[4] == "true")
         Np = parse(Int8, input.Value[5])
         Ni = numv
         Ns = parse(Int16, input.Value[7])
         Ct = input.Value[8]
         Cs = parse(Float32, input.Value[9])
         Nw = input.Value[10]
-        Nps = parse(Float32, input.Value[11])
-
+        Nps= parse(Float32, input.Value[11])
+        Sd = parse(Int16, input.Value[12])
+        
         if verbose
 
             if S
@@ -72,7 +70,7 @@ struct Meta_Data <: Data_Input
             end
         end
 
-        new(Ny,Ne,I,S,Np,Ni,Ns,Ct,Cs,Nw,Nps)
+        new(Ny,Sd,Ne,I,S,Np,Ni,Ns,Ct,Cs,Nw,Nps)
         
     end
 end
@@ -318,14 +316,14 @@ struct Model_Data
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path, XN, verbose = false)
+    function Model_Data(Path, verbose = false)
         
         sim, pops, sea = read_inputs(Path, verbose)
      
-        Time = (0.0,sim.years[1]*365)
+        Time = (sim.S_day,sim.years*365)
        
         #now building feral pig network
-        network, counts = build_network(sim, pops, verbose, XN) 
+        network, counts = build_network(sim, pops, verbose) 
         
         #Now using network to build init pops
         U0 = build_populations(sim, pops, network, counts) #initial populations
@@ -338,7 +336,7 @@ struct Model_Data
     
 end
 
-function build_network(sim, pops, verbose, XN)
+function build_network(sim, pops, verbose)
 
     #This function builds the network
 
@@ -404,7 +402,7 @@ function build_network(sim, pops, verbose, XN)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
 
-            feral = watts_strogatz(nf, n_aim, XN)#sim.N_param)
+            feral = watts_strogatz(nf, n_aim, sim.N_param)
             
         else
             #using an erdos-renyi random network to determine inter-group interactions

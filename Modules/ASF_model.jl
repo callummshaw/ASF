@@ -1,8 +1,6 @@
 module ASF_Model
+
 using LinearAlgebra
-using Statistics
-using CSV
-using DelimitedFiles
 using Distributions
 using SparseArrays
 
@@ -138,7 +136,7 @@ function asf_model_one(out,u,p,t)
     tp = sum(Np) # total living pigs
 
     Density = sqrt((tp/Area)/ref_density) #density of population for beta
-    Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(Np)./sqrt.(K))*0.95
+    Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(Np)./sqrt.(K))*g
     
 
     Lambda = λ + la * cos((t + lo) * 2*pi/year)
@@ -198,7 +196,29 @@ function asf_model_one(out,u,p,t)
     nothing
 end
 
+function asf_ode_model!(du,u,p,t)
+    #ode equivelent of our ASF model
+    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo  = p 
+    u[u.<0] .= 0
+    S, E, I, R, C = u
+    
+    N = sum(u)
+    
+    L = S + E + I + R
+    
+    ds = μ_p*(σ + ((1-σ))*sqrt(L/K))
+    
+    du[1] = k*exp(-bw*cos(pi*(t+bo)/365)^2)*(σ .* L .+ ((1-σ)) .* sqrt.(L .* K)) + κ*R - ds*S - β*(I + ω*C)*S/N
+    du[2] = β*(I + ω*C)*S/N - (ds + ζ)*E
+    du[3] = ζ*E - (ds + γ)*I
+    du[4] = γ*(1-ρ)*I - (ds + κ)*R
+    du[5] = (ds + γ*ρ)*I -1/( λ + la * cos((t + lo) * 2*pi/365))*C
+    
+    nothing
+end
+
 function convert(input)
+    #Function to convert input structure to simple array (used mainly for fitting)
     params = Vector{Any}(undef,22)
     
     beta = copy(input.β)
@@ -285,15 +305,17 @@ function asf_model_pop(out,u,p,t)
 end
 
 function birth_pulse(t, p, i)
+    #birth pulse for a vector!
     return p.k*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2)
 end
 
 function birth_pulse_vector(t,k,s,p)
+    #birth pulse not for a vector
     return k*exp(-s*cos(pi*(t+p)/365)^2)
 end
 
 function reparam!(input)
-
+    #needs to be updated for new model input!
     rebeta!(input) #keeping same links but assinging new values
     
     init_pops = input.U0
