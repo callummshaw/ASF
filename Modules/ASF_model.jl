@@ -7,6 +7,7 @@ using SparseArrays
 export asf_model_pop
 export asf_model_full
 export asf_model_one
+export asf_model_ode
 export convert
 export density_rate
 export frequency_rate
@@ -196,7 +197,7 @@ function asf_model_one(out,u,p,t)
     nothing
 end
 
-function asf_ode_model!(du,u,p,t)
+function asf_model_ode(du,u,p,t)
     #ode equivelent of our ASF model
     β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo  = p 
     u[u.<0] .= 0

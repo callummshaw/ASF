@@ -316,14 +316,14 @@ struct Model_Data
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path, verbose = false)
-        
+    function Model_Data(Path; verbose = false, fitting_rewire = 0)
+        #custom_network parameter used for fitting!
         sim, pops, sea = read_inputs(Path, verbose)
      
         Time = (sim.S_day,sim.years*365)
        
         #now building feral pig network
-        network, counts = build_network(sim, pops, verbose) 
+        network, counts = build_network(sim, pops, fitting_rewire, verbose) 
         
         #Now using network to build init pops
         U0 = build_populations(sim, pops, network, counts) #initial populations
@@ -336,7 +336,7 @@ struct Model_Data
     
 end
 
-function build_network(sim, pops, verbose)
+function build_network(sim, pops, cn, verbose)
 
     #This function builds the network
 
@@ -401,7 +401,18 @@ function build_network(sim, pops, verbose)
             if verbose & isodd(n_aim)
                 @warn "Odd group degree detected, Scale free and small worlds require even degree"
             end
-
+            
+            if cn != 0 
+                @warn "Custom rewiring probability being used!"
+                
+                if (cn > 1) | (cn < 0 )
+                    @warn "Rewiring must be between 0 and 1"
+                end
+                rewire  = cn
+            else
+                rewire = sim.N_param
+            end
+            
             feral = watts_strogatz(nf, n_aim, sim.N_param)
             
         else
