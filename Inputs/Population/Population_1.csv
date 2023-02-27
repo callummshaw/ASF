@@ -3,11 +3,11 @@ Name,Mean,STD
 #Density
 Density,1,0
 #Number of feral groups
-N_feral,1000,0
+N_feral,1,0
 #Number of farms
 N_farm,0,0
 #Feral group size
-Feral_size,6,0
+Feral_size,5000,0
 #Farm size
 Farm_size,1000,100
 #Ratio of lone boars
@@ -15,9 +15,9 @@ Boar,0.2,0
 #Number of interconnection for groups within population
 N_int,6,0
 #Exposed population size in seeded populations 
-Exp_p,3,0
+Exp_p,30,0
 #Infected population size in seeded populations
-Inf_p,2,0
+Inf_p,20,0
 #Natural Birth Rate (We assume at K that birth rate equals death rate)
 Birth_n,0.0036,0.0001
 #Percent of natural birth/death rates that are NOT dependent on population density
@@ -39,11 +39,11 @@ Farm_Feral,0.01,0
 #Power for density transmission (0 is frequency based and 1 is pure density)
 Density_t,0.4,0
 #Corpse infection modifier
-Corpse,0.505,0
+Corpse,0.5,0
 #Latent Rate
-Latent,7,1
+Latent,6,1
 #Recovery period (days)
-Recovery,7,1
+Recovery,8,1
 #Immunity waning rate
 Immunity,180,7
 #Corpse decay rate feral

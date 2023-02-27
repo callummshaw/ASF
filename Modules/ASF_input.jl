@@ -347,7 +347,7 @@ function build_network(sim, pops, cn, verbose)
 
     for pop in 1:n_pops 
         
-        feral_max = 2500 #maximum number of feral groups, will run very slow near maximum
+        feral_max = 5000 #maximum number of feral groups, will run very slow near maximum
         farm_max = 100 #maximum number of farm
 
         data = pops[pop]
@@ -873,7 +873,7 @@ function build_populations(sim, pops, network, counts)
     areas = Vector{Float32}(undef,N_pop) #vector to store each population's area
     
     max_density = 100
-    max_group_size = 100
+    max_group_size = 1000000
     min_group_size = 3
 
     for i in 1:N_pop #looping through all populations

@@ -8,10 +8,14 @@ export asf_model_pop
 export asf_model_full
 export asf_model_one
 export asf_model_ode
+export asf_model_one_group
+
 export convert
-export density_rate
-export frequency_rate
+export convert_single
+
 export reparam!
+
+
 
 function asf_model_full(out,u,p,t)
 
@@ -197,20 +201,55 @@ function asf_model_one(out,u,p,t)
     nothing
 end
 
+function asf_model_one_group(out,u,p,t)
+    #ASF model for a single population (can make some speed increases) without farms!
+
+    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo  = p 
+    
+    u[u.<0] .= 0
+    
+    S, E, I, R, C = u
+    N = sum(u)
+    L = S + E + I + R
+    beta_mod = sqrt(L/K)
+    
+    Deaths = μ_p*(σ + ((1-σ))*sqrt(L/K))
+   
+    Lambda = λ + la * cos((t + lo) * 2*pi/365)
+
+    p_mag = birth_pulse_vector(t,k,bw,bo)
+    Births = p_mag*(σ *L + ((1-σ))*sqrt(L*K))
+    
+   
+    out[1] = Births
+    out[2] = S * Deaths
+    out[3] = beta_mod * β * (I + ω * C) * S / N
+    out[4] = E * Deaths
+    out[5] = ζ * E
+    out[6] = ρ * γ * I 
+    out[7] = I * Deaths
+    out[8] = γ * (1 - ρ) * I
+    out[9] = R * Deaths
+    out[10] = (1 / Lambda) * C
+    out[11] = κ * R 
+
+
+    nothing
+end
+
+
 function asf_model_ode(du,u,p,t)
     #ode equivelent of our ASF model
     β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo  = p 
-    u[u.<0] .= 0
+    #u[u.<0] .= 0
     S, E, I, R, C = u
-    
     N = sum(u)
-    
     L = S + E + I + R
-    
+    beta_mod = sqrt(L/K)
     ds = μ_p*(σ + ((1-σ))*sqrt(L/K))
     
-    du[1] = k*exp(-bw*cos(pi*(t+bo)/365)^2)*(σ .* L .+ ((1-σ)) .* sqrt.(L .* K)) + κ*R - ds*S - β*(I + ω*C)*S/N
-    du[2] = β*(I + ω*C)*S/N - (ds + ζ)*E
+    du[1] = k*exp(-bw*cos(pi*(t+bo)/365)^2)*(σ .* L .+ ((1-σ)) .* sqrt.(L .* K)) + κ*R - ds*S - beta_mod*β*(I + ω*C)*S/N
+    du[2] = beta_mod*β*(I + ω*C)*S/N - (ds + ζ)*E
     du[3] = ζ*E - (ds + γ)*I
     du[4] = γ*(1-ρ)*I - (ds + κ)*R
     du[5] = (ds + γ*ρ)*I -1/( λ + la * cos((t + lo) * 2*pi/365))*C
@@ -253,7 +292,28 @@ function convert(input)
     params[22] = copy(input.Populations.area[1])
     return params
 end
-
+function convert_single(input)
+    #Function to convert input structure to simple array (used mainly for fitting)
+    params = Vector{Any}(undef,15)
+    
+    params[1]  = copy(input.β[1])
+    params[2]  = copy(input.μ_p[1])
+    params[3]  = copy(input.K[1])
+    params[4]  = copy(input.ζ[1])
+    params[5]  = copy(input.γ[1])
+    params[6]  = copy(input.ω[1])
+    params[7] = copy(input.ρ[1])
+    params[8] = copy(input.λ[1])
+    params[9] = copy(input.κ[1])
+    params[10] = copy(input.σ[1])
+    params[11] = copy(input.bw[1])
+    params[12] = copy(input.bo[1])
+    params[13] = copy(input.k[1])
+    params[14] = copy(input.la[1])
+    params[15] = copy(input.lo[1])
+    
+    return params
+end
 function asf_model_pop(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
