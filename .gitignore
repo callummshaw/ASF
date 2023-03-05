@@ -3,3 +3,4 @@ Running/*.png
 Results/
 .ipynb_checkpoints
 *.gif
+*.so
