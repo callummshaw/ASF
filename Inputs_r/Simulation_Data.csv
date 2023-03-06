@@ -19,8 +19,8 @@ C_Type,c
 #Connection Strength- for inbuilt sims, this is the connection strength between populations
 C_Str,0.1
 #Network type: random(r), scale-free (s), or small-worlds (w)
-Network,w
+Network,r
 #Degree of network
-N_param,0.2
+N_param,0.21
 #Starting Date (1-365,  where jan 1st = 1 etc.)
 S_Day,180

@@ -905,9 +905,9 @@ function build_populations(sim, pops, network, counts)
 
         sd = sum(group_degree  .== 0)
         
-        if sd > 0
-            @warn "$sd disconnected feral groups!"
-        end
+        #if sd > 0
+         #   @warn "$sd disconnected feral groups!"
+        #end
 
         #now want to choose the N_boar groups with the highest degree as these are boars, the others will be sow_dist
         index_boar = sort(partialsortperm(group_degree,1:N_boar,rev=true)) #index of all boar groups
