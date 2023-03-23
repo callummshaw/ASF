@@ -165,8 +165,8 @@ end
     
 function summary_stat(solution)
     #takes the model output and converts it into the needed three summary statistics
-    output = zeros(3)
    
+    filter = true
     ep = 0
     mt = 0
     pd = 0
@@ -182,19 +182,47 @@ function summary_stat(solution)
     pd = 100*(1-(sum(p[3*365:end])/ln)/pop_K)
 
     max_d = findmax(d)[2][1]
+    
+    
+    if filter
+        output = zeros(4)
+        if d[end] == 0
+            output[1] = 0
+            output[2] = 0
+            output[3] = 0
+            output[4] = 0
+        else
+            if maximum(d) <= starting_p
+                take_off_time = 0
+            else
+                take_off_time = findfirst(>(starting_p), d)[1]
+            end
 
-    if maximum(d) <= starting_p
-        take_off_time = 0
+            mt = max_d-take_off_time
+
+            output[1] = ep
+            output[2] = pd
+            output[3] = mt 
+            output[4] = 1
+        end
     else
-        take_off_time = findfirst(>(starting_p), d)[1]
-    end
+        output = zeros(3)        
 
-    mt = max_d-take_off_time
-        
-    output[1] = ep
-    output[2] = pd
-    output[3] = mt
-        
+        if maximum(d) <= starting_p
+            take_off_time = 0
+        else
+            take_off_time = findfirst(>(starting_p), d)[1]
+        end
+
+        mt = max_d-take_off_time
+
+        output[1] = ep
+        output[2] = pd
+        output[3] = mt
+    
+    end
+  
+    
     return output
         
 end

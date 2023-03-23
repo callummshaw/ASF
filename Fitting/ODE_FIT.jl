@@ -56,8 +56,7 @@ std_pd = 6.08
 mean_mt = 180
 std_mt = 36.475
 
-observation = [mean_ep, mean_pd, mean_mt]
-
+observation = Dict("SS"=>[mean_ep, mean_pd, mean_mt])
 
 function distance(Y,Y0)
     
@@ -96,6 +95,8 @@ function run_analysis(sol)
         return disease_sum, disease_alive_sum, disease_free_sum, population_sum
 end
     
+
+
 function summary_stat(solution)
     
     output = zeros(3)
@@ -124,7 +125,6 @@ function summary_stat(solution)
 
     mt = max_d-take_off_time
         
-        
     output[1] = ep
     output[2] = pd
     output[3] = mt
@@ -135,6 +135,8 @@ end
 
 function model_1(par)
     
+      #p1 = par[1]
+    #p2 = par[2]
     p1 = par["p1"]
     p2 = par["p2"]
     
@@ -149,11 +151,13 @@ function model_1(par)
     summary = summary_stat(sol)
     
     return Dict("SS"=>summary)
-    
+    #return summary
 end
 
 function model_2(par)
     
+     #p1 = par[1]
+    #p2 = par[2]
     p1 = par["p1"]
     p2 = par["p2"]
     
@@ -168,10 +172,14 @@ function model_2(par)
     summary = summary_stat(sol)
     
     return Dict("SS"=>summary)
-    
+    #return summary
+
 end
 
 function model_3(par)
+    
+     #p1 = par[1]
+    #p2 = par[2]
     
     p1 = par["p1"]
     p2 = par["p2"]
@@ -187,14 +195,16 @@ function model_3(par)
     summary = summary_stat(sol)
     
     return Dict("SS"=>summary)
-    
+    #return summary
+
 end
 
 function model_4(par)
     
+     #p1 = par[1]
+    #p2 = par[2]
     p1 = par["p1"]
     p2 = par["p2"]
-    
     params[1] = p1
     params[6] = p2
     
@@ -206,7 +216,9 @@ function model_4(par)
     summary = summary_stat(sol)
     
     return Dict("SS"=>summary)
-    
+    #return summary
+
 end
+
 
 end
