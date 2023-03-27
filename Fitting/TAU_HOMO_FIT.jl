@@ -10,7 +10,7 @@ include("/home/callum/ASF/Modules/ASF_input.jl");
 
 #Tspan params
 start_day = 180.0
-n_years = 6
+n_years = 3
 Tspan = (start_day,n_years*365+start_day)
 #seeding init pop
 n_exp = 30 #number of exposed
@@ -20,7 +20,41 @@ u0 = [N_total-n_exp-n_inf,30,20,0,0] #init pop
 
 #Summary Stats 
 
-params = [0.1, 0.003599999938160181, 5000.0, 0.1666666716337204,0.125, 0.5, 0.949999988079071, 60.0, 0.0055555556900799274, 0.75, 3.0, 75.0, 0.009801327250897884, 30.0, 0.0, 4]
+beta = 0.1
+
+net_birth = 0.003599999938160181
+
+carrying = 5000
+
+exposed_rate = 0.1666666716337204
+
+recovery_rate = 0.125
+
+omega = 0.5
+
+death = 0.95
+
+decay = 60
+
+wane = 0.0055555556900799274 #180 days
+
+sigma = 0.75
+
+birth_width = 3
+
+birth_offset = 75
+
+birth_amp = 0.009801327250897884
+
+seasonal_day = 30
+
+seasonal_offset = 0 
+
+model_number = 4
+
+  
+    
+params = [beta, net_birth, carrying, exposed_rate, recovery_rate, omega, death, decay, wane, sigma, birth_width, birth_offset, birth_amp, seasonal_day, seasonal_offset, model_number]
 
 #Our observations, 3 summary params their means and std (found from calculating 95\% conf interval)
 
@@ -132,7 +166,7 @@ function asf_model_one_group(out,u,p,t)
     out[7] = I * Deaths
     out[8] = γ * (1 - ρ) * I
     out[9] = R * Deaths
-    out[10] = (1 / Lambda) * C
+    out[10] = (1 / (Lambda)) * C
     out[11] = κ * R 
 
 
@@ -315,6 +349,7 @@ function model_4(par)
     return Dict("SS"=>summary)
     
 end
+
 
 
 end
