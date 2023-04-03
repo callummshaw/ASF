@@ -16,8 +16,8 @@ function asf_model_ode(du,u,p,t)
     elseif ty == 2
         beta_mod = L/K
     elseif ty == 3
-        beta_mod =  tanh(1.2 *L/K - 1.2 ) + 1
-    else
+        beta_mod =  tanh(1.5 *L/K - 1.5 ) + 1
+    elseif ty == 4
         beta_mod = sqrt(L/K)
     end
     
@@ -45,11 +45,11 @@ u0 = [N_total-n_exp-n_inf,30,20,0,0] #init pop
 #Summary Stats 
 beta = 0.1
 
-net_birth = 0.003599999938160181
+net_birth = 0.0036
 
-carrying = 5000
+carrying = 5000.0
 
-exposed_rate = 0.1666666716337204
+exposed_rate = 0.16666667
 
 recovery_rate = 0.125
 
@@ -57,23 +57,23 @@ omega = 0.5
 
 death = 0.95
 
-decay = 60
+decay = 60.0
 
-wane = 0.0055555556900799274 #180 days
+wane = 0.0055555557 #180 days
 
 sigma = 0.75
 
-birth_width = 3
+birth_width = 3.0
 
-birth_offset = 75
+birth_offset = 75.0
 
 birth_amp = 0.009801327250897884
 
-seasonal_day = 30
+seasonal_day = 30.0
 
 seasonal_offset = 0 
 
-model_number = 4
+model_number = 1000
 
     
 params = [beta, net_birth, carrying, exposed_rate, recovery_rate, omega, death, decay, wane, sigma, birth_width, birth_offset, birth_amp, seasonal_day, seasonal_offset, model_number]

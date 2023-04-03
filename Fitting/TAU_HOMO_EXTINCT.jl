@@ -12,7 +12,7 @@ int_start = 3*30
 #Tspan params
 start_day = 180.0
 n_years = 3
-Tspan = (start_day,n_years*365+start_day+int_start)
+Tspan = (start_day,n_years*365+start_day+180)
 #seeding init pop
 n_exp = 30 #number of exposed
 n_inf = 20 #number of infected
@@ -291,10 +291,11 @@ function model_int(par)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
         
-    summary = summary_stat(sol)
-    
-    return summary[4]
-    #return summary
+    #summary = summary_stat(sol)
+    data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
+    #return summary[4]
+    return data
 end
 
 

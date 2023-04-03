@@ -10,7 +10,7 @@ include("/home/callum/ASF/Modules/ASF_input.jl");
 
 #Tspan params
 start_day = 180.0
-n_years = 3
+n_years = 6
 Tspan = (start_day,n_years*365+start_day)
 #seeding init pop
 n_exp = 30 #number of exposed
@@ -144,8 +144,8 @@ function asf_model_one_group(out,u,p,t)
     elseif ty == 2
         beta_mod = L/K
     elseif ty == 3
-        beta_mod =  tanh(1.2 *L/K - 1.2 ) + 1
-    else
+        beta_mod =  tanh(1.5 *L/K - 1.5) + 1
+    elseif ty == 4
         beta_mod = sqrt(L/K)
     end
     

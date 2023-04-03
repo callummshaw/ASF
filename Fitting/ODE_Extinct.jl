@@ -22,7 +22,7 @@ function asf_model_ode(du,u,p,t)
     end
     
     ds = μ_p*(σ + ((1-σ))*sqrt(L/K))
-    
+    lam = 1/( λ + la * cos((t + lo) * 2*pi/365))
     
     if t < int_start #prior to intervention
         lam = 1/( λ + la * cos((t + lo) * 2*pi/365))
@@ -225,12 +225,28 @@ function model_int(par)
     
     
     
-    prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day+int_start), params)
+    prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
         
     summary = summary_stat(sol)
     
-    return summary[4]
+    #return summary[4]
+    
+    data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
+    
+    s_d = data[:,1]
+    e_d = data[:,2]
+    i_d = data[:,3]
+    r_d = data[:,4]
+    c_d = data[:,5]
+ 
+    sus = sum(s_d, dims=2)
+    np = sum(e_d+s_d+i_d+r_d, dims =2)
+    inf = sum(e_d+i_d+c_d, dims =2)
+    
+    
+    return sus, np, inf
    
 end
 
