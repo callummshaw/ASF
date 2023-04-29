@@ -1,6 +1,42 @@
 module SIR_ODE
 
 using DifferentialEquations
+using Statistics
+
+function asf_model_logistic(du,u,p,t)
+    #ode equivelent of our ASF model
+    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo, ty  = p 
+    
+    S, E, I, R, C = u
+    N = sum(u)
+    L = S + E + I + R
+    
+    #the different contact functions
+    if ty == 1
+        beta_mod = 1
+    elseif ty == 2
+        beta_mod = L/K
+    elseif ty == 3
+        beta_mod =  tanh(1.5 *L/K - 1.5 ) + 1
+    elseif ty == 4
+        beta_mod = sqrt(L/K)
+    end
+    
+    br =  k*exp(-bw*cos(pi*(t+bo)/365)^2)
+    μ = 2/3*μ_p
+    r = br - μ
+    g = r/K
+    
+    du[1] = br*L -(μ+g*L)*S + κ*R - beta_mod*β*(I + ω*C)*S/N
+    du[2] = beta_mod*β*(I + ω*C)*S/N - (μ+g*L+ζ)*E
+    du[3] = ζ*E - (μ + g*L + γ)*I
+    du[4] = γ*(1-ρ)*I - (μ+g*L + κ)*R
+    du[5] = (μ+g*L + γ*ρ)*I -1/(( λ + la * cos((t + lo) * 2*pi/365)))*C
+    
+    nothing
+end
+
+
 
 function asf_model_ode(du,u,p,t)
     #ode equivelent of our ASF model
@@ -40,7 +76,7 @@ n_years = 6
 n_exp = 30 #number of exposed
 n_inf = 20 #number of infected
 N_total = 6518 # total population at start date (180) found from previous burn in
-u0 = [N_total-n_exp-n_inf,30,20,0,0] #init pop
+u0 = [N_total-n_exp-n_inf,n_exp,n_inf,0,0] #init pop
 
 #Summary Stats 
 beta = 0.1
@@ -202,13 +238,38 @@ function model_1(par)
     
     params[end] = 1
     
-    prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
+    prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day),params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
         
-    summary = summary_stat(sol)
+    #summary = summary_stat(sol)
+    #return Dict("SS"=>summary)
+    data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
+
+    nt = 3*365
     
-    return Dict("SS"=>summary)
-    #return summary
+    s_d = data[nt:end,1]
+    e_d = data[nt:end,2]
+    i_d = data[nt:end,3]
+    r_d = data[nt:end,4]
+    c_d = data[nt:end,5]
+   
+    p = s_d + e_d + i_d + r_d
+    
+    
+    c4 = 1
+    
+    inf_pop = e_d + i_d + c_d
+    
+    if inf_pop[end] > 1
+        fi = p1*mean(c4 .* i_d ./ p) 
+        fc = p1*p2*mean(c4 .* c_d ./ p) 
+    else
+        fi = 9999
+        fc = 9999
+    end
+    return fi, fc
+
 end
 
 function model_2(par)
@@ -224,10 +285,24 @@ function model_2(par)
     prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
         
-    summary = summary_stat(sol)
+    #summary = summary_stat(sol)
+    #return Dict("SS"=>summary)
+    data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
+    nt = 3*365
     
-    return Dict("SS"=>summary)
-    #return summary
+    s_d = data[nt:end,1]
+    e_d = data[nt:end,2]
+    i_d = data[nt:end,3]
+    r_d = data[nt:end,4]
+    c_d = data[nt:end,5]
+   
+    p = s_d + e_d + i_d + r_d
+    
+    
+    fi = p1*mean(i_d)/mean(p) 
+    fc = p1*p2*mean(c_d)/mean(p)
+    return fi, fc
 
 end
 
@@ -245,11 +320,19 @@ function model_3(par)
     prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
         
-    summary = summary_stat(sol)
-    
-    return Dict("SS"=>summary)
-    #return summary
+   #summary = summary_stat(sol)
+    #return Dict("SS"=>summary)
+    data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
 
+    s_d = data[:,1]
+    e_d = data[:,2]
+    i_d = data[:,3]
+    r_d = data[:,4]
+    c_d = data[:,5]
+    
+    return s_d, e_d, i_d, r_d, c_d
+    
 end
 
 function model_4(par)
@@ -265,12 +348,35 @@ function model_4(par)
     
     prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
-        
-    summary = summary_stat(sol)
-    
-    return Dict("SS"=>summary)
-    #return summary
+    #summary = summary_stat(sol)
+    #return Dict("SS"=>summary)
+    data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
 
+    nt = 3*365
+    
+    s_d = data[nt:end,1]
+    e_d = data[nt:end,2]
+    i_d = data[nt:end,3]
+    r_d = data[nt:end,4]
+    c_d = data[nt:end,5]
+   
+    p = s_d + e_d + i_d + r_d
+    NK = p./5000
+    c4 = sqrt.(NK)
+    
+    inf_pop = e_d + i_d + c_d
+    
+    if inf_pop[end] > 1
+        fi = p1*mean(c4 .* i_d ./ p) 
+        fc = p1*p2*mean(c4 .* c_d ./ p) 
+    else
+        fi = 9999
+        fc = 9999
+    end
+    
+    return fi, fc
+    
 end
 
 

@@ -5,6 +5,8 @@ using LinearAlgebra
 using SparseArrays
 using Distributions
 using Random
+using CSV
+using DataFrames
 
 include("/home/callum/ASF/Modules/ASF_input.jl");
 
@@ -28,9 +30,13 @@ std_mt = 36.475
 
 observation = Dict("SS"=>[mean_ep, mean_pd, mean_mt])
 
-input_path = "/home/callum/ASF/Inputs_sf/"; #path to model data
+input_path = "/home/callum/ASF/Inputs_sw/"; #path to model data
 input = ASF_Inputs.Model_Data(input_path)
 
+
+function sample_func(p)
+    print(p)
+end
 
 KT = sum(input.Parameters.K)
 
@@ -82,10 +88,22 @@ function distance(Y,Y0)
     return d
 end
 
+mutable struct force_inf
+    #=
+    Structure to store key parameters
+    =#
+    t::Int16 
+     
+    lb::Float32 
+    ls::Float32 
+    cb::Float32 
+    cs::Float32 
+end
+
 function asf_model_one(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
-    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area, ty = p 
+    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area, ty,test = p 
     ref_density = 1 #baseline density (from Baltics where modelled was fitted)
     year = 365 #days in a year
 
@@ -157,7 +175,14 @@ function asf_model_one(out,u,p,t)
     populations  = v*N'+ N*v'
     
     populations[diagind(populations)] = N
-
+    
+    if t > 3*365
+        
+        force_calc(I,C,N,K,test, beta_mod,β_i,β_o, populations, ω)
+        
+    end
+     
+    
     out[1:11:end] .= Births
     out[2:11:end] .= S.*Deaths
     out[3:11:end] .=  (((beta_mod .* β_o .* S) ./ populations)*(I .+ ω .* C)).+ β_i .* (S ./ N) .* (I .+ ω .* C)
@@ -169,7 +194,7 @@ function asf_model_one(out,u,p,t)
     out[9:11:end] .= R.*Deaths
     out[10:11:end].= (1 ./ Lambda) .* C
     out[11:11:end] .= κ .* R 
-
+    
 
     nothing
 end
@@ -316,7 +341,7 @@ function burn_in_pop(params, U0)
     return U_burn
 end
 
-function model_1(par)
+function model_1(par,path)
     
     p1 = par["p1"]
     p2 = par["p2"]
@@ -324,33 +349,34 @@ function model_1(par)
     
     input = ASF_Inputs.Model_Data(input_path)
     
-    params = convert(input.Parameters)
-    
     U0 = input.U0
-
+    
+    tester = force_inf(0,0,0,0,0)
+    
+    params = convert(input.Parameters,1,tester)
     init_pop = burn_in_pop(params, U0)
     
-
     #beta
     params[1] .= p1 #intra
     params[2][params[2] .!= 0 ] .= p2/n_con #inter
     
     #corpse
     params[8] = p3 
+
     
-    append!(params, 1)
     rj = RegularJump(asf_model_one, regular_c, eqs*nt)
     prob = DiscreteProblem(init_pop,Tspan,params)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
-        
-    summary = summary_stat(sol)
-    
-    return Dict("SS"=>summary)
+    save_out(tester,path)
+
+   nothing
     
 end
 
-function model_2(par)
+
+
+function model_4(par, path)
     
     p1 = par["p1"]
     p2 = par["p2"]
@@ -358,103 +384,66 @@ function model_2(par)
     
     input = ASF_Inputs.Model_Data(input_path)
     
-    params = convert(input.Parameters)
-    
     U0 = input.U0
-
+    
+    tester = force_inf(0,0,0,0,0)
+    
+    params = convert(input.Parameters,4,tester)
     init_pop = burn_in_pop(params, U0)
     
-
     #beta
     params[1] .= p1 #intra
     params[2][params[2] .!= 0 ] .= p2/n_con #inter
     
     #corpse
     params[8] = p3 
+
     
-    append!(params, 2)
     rj = RegularJump(asf_model_one, regular_c, eqs*nt)
     prob = DiscreteProblem(init_pop,Tspan,params)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
-        
-    summary = summary_stat(sol)
-    
-    return Dict("SS"=>summary)
-    
+    save_out(tester,path)
+
+   nothing
 end
 
-function model_3(par)
-    
-    p1 = par["p1"]
-    p2 = par["p2"]
-    p3 = par["p3"]
-    
-    input = ASF_Inputs.Model_Data(input_path)
-    
-    params = convert(input.Parameters)
-    
-    U0 = input.U0
-
-    init_pop = burn_in_pop(params, U0)
-    
-
-    #beta
-    params[1] .= p1 #intra
-    params[2][params[2] .!= 0 ] .= p2/n_con #inter
-    
-    #corpse
-    params[8] = p3 
-    
-    append!(params, 3)
-    rj = RegularJump(asf_model_one, regular_c, eqs*nt)
-    prob = DiscreteProblem(init_pop,Tspan,params)
-    jump_prob = JumpProblem(prob,Direct(),rj)
-    sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
-        
-    summary = summary_stat(sol)
-    
-    return Dict("SS"=>summary)
-    
+function save_out(test,path)
+    df = DataFrame(Time=test.t, LiveBoar = test.lb, LiveSow = test.ls, CorpseBoar = test.cb, CorpseSow = test.cs)
+    CSV.write(path,df, append = true)
+    nothing
 end
 
-function model_4(par)
-    
-    p1 = par["p1"]
-    p2 = par["p2"]
-    p3 = par["p3"]
-    
-    input = ASF_Inputs.Model_Data(input_path)
-    
-    params = convert(input.Parameters)
-    
-    U0 = input.U0
-
-    init_pop = burn_in_pop(params, U0)
+function force_calc(I,C,N,K, test, beta_mod, β_i,β_o,populations, ω)
+    test.t += 1
     
 
-    #beta
-    params[1] .= p1 #intra
-    params[2][params[2] .!= 0 ] .= p2/n_con #inter
-    
-    #corpse
-    params[8] = p3 
-    
-    append!(params, 4)
-    rj = RegularJump(asf_model_one, regular_c, eqs*nt)
-    prob = DiscreteProblem(init_pop,Tspan,params)
-    jump_prob = JumpProblem(prob,Direct(),rj)
-    sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
-        
-    summary = summary_stat(sol)
-    
-    return Dict("SS"=>summary)
-    
+
+    Ib = copy(I)
+    Is = copy(I)
+
+    Cb = copy(C)
+    Cs = copy(C)
+
+    Ib[K .> 1] .= 0
+    Is[K .== 1] .= 0
+
+    Cb[K .> 1] .= 0
+    Cs[K .== 1] .= 0
+
+
+    test.lb += mean((((beta_mod .* β_o ) ./ populations)*(Ib)).+ (β_i  ./ N) .* (Ib))
+    test.ls += mean((((beta_mod .* β_o ) ./ populations)*(Is)).+ (β_i  ./ N) .* (Is))
+
+    test.cb += mean((((beta_mod .* β_o ) ./ populations)*(ω .* Cb)).+ (β_i  ./ N) .* (ω .* Cb))
+    test.cs += mean((((beta_mod .* β_o ) ./ populations)*(ω .* Cs)).+ (β_i  ./ N) .* (ω .* Cs))
+
 end
 
-function convert(input)
+
+function convert(input,model_no,force)
     #Function to convert input structure to simple array (used mainly for fitting)
-    params = Vector{Any}(undef,22)
+    params = Vector{Any}(undef,24)
     
     beta = copy(input.β)
     beta_con = copy(input.β_b)
@@ -485,6 +474,9 @@ function convert(input)
     params[21] = copy(input.lo[1])
     
     params[22] = copy(input.Populations.area[1])
+    
+    params[23] = model_no
+    params[24] = force
     return params
 end
 

@@ -16,18 +16,17 @@ function asf_model_ode(du,u,p,t)
     elseif ty == 2
         beta_mod = L/K
     elseif ty == 3
-        beta_mod =  tanh(1.2 *L/K - 1.2 ) + 1
-    else
+        beta_mod =  tanh(1.5 *L/K - 1.5 ) + 1
+    else            
         beta_mod = sqrt(L/K)
     end
     
     ds = μ_p*(σ + ((1-σ))*sqrt(L/K))
-    lam = 1/( λ + la * cos((t + lo) * 2*pi/365))
     
     if t < int_start #prior to intervention
         lam = 1/( λ + la * cos((t + lo) * 2*pi/365))
     else #intervention scaling of decay time
-        lam = 1/(ttt*( λ + la * cos((t + lo) * 2*pi/365)))
+        lam = ttt*1/(( λ + la * cos((t + lo) * 2*pi/365)))
     end
     
     du[1] = k*exp(-bw*cos(pi*(t+bo)/365)^2)*(σ .* L .+ ((1-σ)) .* sqrt.(L .* K)) + κ*R - ds*S - beta_mod*β*(I + ω*C)*S/N
@@ -38,9 +37,48 @@ function asf_model_ode(du,u,p,t)
     
     nothing
 end
+function asf_model_logistic(du,u,p,t)
+    #ode equivelent of our ASF model but LOGISTIC!
+    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo, ty,ttt  = p 
+    
+    S, E, I, R, C = u
+    N = sum(u)
+    L = S + E + I + R
+    
+    #the different contact functions
+    if ty == 1
+        beta_mod = 1
+    elseif ty == 2
+        beta_mod = L/K
+    elseif ty == 3
+        beta_mod =  tanh(1.5 *L/K - 1.5 ) + 1
+    elseif ty == 4
+        beta_mod = sqrt(L/K)
+    end
+    
+    br =  k*exp(-bw*cos(pi*(t+bo)/365)^2)
+    μ_p = (2/3)*μ_p
+    r = br - μ_p
+    g = r/K
+    
+    if t < int_start #prior to intervention
+        lam = 1/( λ + la * cos((t + lo) * 2*pi/365))
+    else #intervention scaling of decay time
+        lam =ttt* 1/( λ + la * cos((t + lo) * 2*pi/365))
+    end
+    
+    
+    du[1] = br*L -(μ_p+g*L)*S + κ*R - beta_mod*β*(I + ω*C)*S/N
+    du[2] = beta_mod*β*(I + ω*C)*S/N - (μ_p+g*L+ζ)*E
+    du[3] = ζ*E - (μ_p + g*L + γ)*I
+    du[4] = γ*(1-ρ)*I - (μ_p+g*L + κ)*R
+    du[5] = (μ_p+g*L + γ*ρ)*I -lam*C
+    
+    nothing
+end
 
 #Time till intervention starts!
-int_start = 3*30
+int_start = 0*30
 
 
 #Tspan params
@@ -50,8 +88,8 @@ n_years = 3
 #seeding init pop
 n_exp = 30 #number of exposed
 n_inf = 20 #number of infected
-N_total = 6518 # total population at start date (180) found from previous burn in
-u0 = [N_total-n_exp-n_inf,30,20,0,0] #init pop
+N_total = 6518 #5000 for logistic # total population at start date (180) found from previous burn in
+u0 = [N_total-n_exp-n_inf,n_exp,n_inf,0,0] #init pop
 
 #Summary Stats 
 
@@ -146,13 +184,13 @@ end
 
 function summary_stat(solution)
     
-    filter = true
+    filter = true #turn on for intervention sim!
     ep = 0
     mt = 0
     pd = 0
     
     detection_p = 0.05
-    pop_K = 5100
+    pop_K = 5000
     
     starting_p = detection_p*pop_K
    
@@ -210,6 +248,8 @@ end
 
 function model_int(par)
     
+    force = false #not looking at force of infection
+    
     p1 = par[1]#beta
     p2 = par[2]#omega
     p3 = par[3]#model number
@@ -225,29 +265,32 @@ function model_int(par)
     
     
     
-    prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
+    prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day+int_start), params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
         
-    summary = summary_stat(sol)
     
-    #return summary[4]
+    if force
+        data = reduce(vcat,transpose.(sol.u))
+        data[data .< 0 ] .= 0
+
+        s_d = data[:,1]
+        e_d = data[:,2]
+        i_d = data[:,3]
+        r_d = data[:,4]
+        c_d = data[:,5]
+
+        n_d = s_d+e_d+i_d+r_d
+
+        return s_d, n_d
+        
+    else
+        summary = summary_stat(sol)
     
-    data = reduce(vcat,transpose.(sol.u))
-    data[data .< 0 ] .= 0
+        return summary[4] #if endemic! this is for intervention sims
+        
+    end
+
     
-    s_d = data[:,1]
-    e_d = data[:,2]
-    i_d = data[:,3]
-    r_d = data[:,4]
-    c_d = data[:,5]
- 
-    sus = sum(s_d, dims=2)
-    np = sum(e_d+s_d+i_d+r_d, dims =2)
-    inf = sum(e_d+i_d+c_d, dims =2)
-    
-    
-    return sus, np, inf
-   
 end
 
 

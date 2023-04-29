@@ -173,6 +173,56 @@ function asf_model_one_group(out,u,p,t)
     nothing
 end
 
+function asf_model_one_log(out,u,p,t)
+    #ASF model for a single population (can make some speed increases) without farms!
+
+    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo, ty  = p 
+    
+    u[u.<0] .= 0
+    
+    S, E, I, R, C = u
+    N = sum(u)
+    L = S + E + I + R
+    if N == 0 
+        N = 1
+    end
+    if ty == 1
+        beta_mod = 1
+    elseif ty == 2
+        beta_mod = L/K
+    elseif ty == 3
+        beta_mod =  tanh(1.5 *L/K - 1.5) + 1
+    elseif ty == 4
+        beta_mod = sqrt(L/K)
+    end
+    
+   
+   
+    Lambda = λ + la * cos((t + lo) * 2*pi/365)
+
+   
+    br =  birth_pulse_vector(t,k,bw,bo)
+    μ = 2/3*μ_p
+    r = br - μ
+    g = r/K
+    
+   #11 processes
+    out[1] = br*L
+    out[2] = (μ+g*L)*S
+    out[3] = beta_mod * β * (I + ω * C) * S / N
+    out[4] = (μ+g*L)*E
+    out[5] = ζ * E
+    out[6] = ρ * γ * I 
+    out[7] = I * (μ+g*L)
+    out[8] = γ * (1 - ρ) * I
+    out[9] = R * (μ+g*L)
+    out[10] = (1 / (Lambda)) * C
+    out[11] = κ * R 
+
+
+    nothing
+end
+
 function run_analysis(sol)
        #function to analyse model output (converts classes into more bitesize form)
         data = reduce(vcat,transpose.(sol.u))
@@ -281,10 +331,33 @@ function model_1(par)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
 
-    summary = summary_stat(sol)
+    #summary = summary_stat(sol)
     
-    return Dict("SS"=>summary)
+    #return Dict("SS"=>summary)
+    data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
+
+    nt = 3*365
     
+    s_d = data[nt:end,1]
+    e_d = data[nt:end,2]
+    i_d = data[nt:end,3]
+    r_d = data[nt:end,4]
+    c_d = data[nt:end,5]
+   
+    p = s_d + e_d + i_d + r_d
+    NK = p./5000
+    c4 = 1
+    inf_pop = e_d + i_d + c_d
+    
+    if inf_pop[end] > 1
+        fi = p1*mean(c4 .* i_d ./ p) 
+        fc = p1*p2*mean(c4 .* c_d ./ p) 
+    else
+        fi = 9999
+        fc = 9999
+    end
+    return fi, fc
 end
 
 function model_2(par)
@@ -302,10 +375,19 @@ function model_2(par)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
         
-    summary = summary_stat(sol)
+    #summary = summary_stat(sol)
     
-    return Dict("SS"=>summary)
+    #return Dict("SS"=>summary)
+     data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
+
+    s_d = data[:,1]
+    e_d = data[:,2]
+    i_d = data[:,3]
+    r_d = data[:,4]
+    c_d = data[:,5]
     
+    return s_d, e_d, i_d, r_d, c_d
 end
 
 function model_3(par)
@@ -323,10 +405,19 @@ function model_3(par)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
         
-    summary = summary_stat(sol)
+    #summary = summary_stat(sol)
     
-    return Dict("SS"=>summary)
+    #return Dict("SS"=>summary)
+     data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
+
+    s_d = data[:,1]
+    e_d = data[:,2]
+    i_d = data[:,3]
+    r_d = data[:,4]
+    c_d = data[:,5]
     
+    return s_d, e_d, i_d, r_d, c_d
 end
 
 function model_4(par)
@@ -344,10 +435,34 @@ function model_4(par)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
         
-    summary = summary_stat(sol)
+    #summary = summary_stat(sol)
     
-    return Dict("SS"=>summary)
+    #return Dict("SS"=>summary)
+     data = reduce(vcat,transpose.(sol.u))
+    data[data .< 0 ] .= 0
+
+    nt = 3*365
     
+    s_d = data[nt:end,1]
+    e_d = data[nt:end,2]
+    i_d = data[nt:end,3]
+    r_d = data[nt:end,4]
+    c_d = data[nt:end,5]
+   
+    p = s_d + e_d + i_d + r_d
+    NK = p./5000
+    c4 = sqrt.(NK)
+    inf_pop = e_d + i_d + c_d
+    
+    if inf_pop[end] > 1
+        fi = p1*mean(c4 .* i_d ./ p) 
+        fc = p1*p2*mean(c4 .* c_d ./ p) 
+    else
+        fi = 9999
+        fc = 9999
+    end
+    
+    return fi, fc
 end
 
 

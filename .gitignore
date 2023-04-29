@@ -4,3 +4,5 @@ Results/
 .ipynb_checkpoints
 *.gif
 Fitting/*.so
+Fitting/Posteriors/*
+Fitting/Plots/*

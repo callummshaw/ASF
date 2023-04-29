@@ -8,16 +8,16 @@ using Distributions
 include("/home/callum/ASF/Modules/ASF_input.jl");
 
 #Time till intervention starts!
-int_start = 3*30
+int_start = 0*30
 #Tspan params
 start_day = 180.0
 n_years = 3
-Tspan = (start_day,n_years*365+start_day+180)
+Tspan = (start_day,n_years*365+start_day+int_start)
 #seeding init pop
 n_exp = 30 #number of exposed
 n_inf = 20 #number of infected
 N_total = 6518 # total population at start date (180) found from previous burn in
-u0 = [N_total-n_exp-n_inf,30,20,0,0] #init pop
+u0 = [N_total-n_exp-n_inf,n_exp,n_inf,0,0] #init pop
 
 #Summary Stats 
 
@@ -70,8 +70,6 @@ std_mt = 36.475
 
 observation = [mean_ep, mean_pd, mean_mt]
 
-#Time till intervention starts!
-int_start = 3*30
 
 #Transition Matrix
 
@@ -110,11 +108,6 @@ function regular_c(du,u,p,t,counts,mark)
     mul!(du,dc,counts)
     nothing
 end
-function dummy()
-    input_path = "/home/callum/ASF/Inputs/"; #path to model data
-    ASF_Inputs.Model_Data(input_path)
-    println("it lives")
-    end
 
 function distance(Y,Y0)
     #Distance function for ABC fitting
@@ -147,14 +140,14 @@ function asf_model_one_group(out,u,p,t)
     elseif ty == 2
         beta_mod = L/K
     elseif ty == 3
-        beta_mod =  tanh(1.2 *L/K - 1.2 ) + 1
+        beta_mod =  tanh(1.5 *L/K - 1.5 ) + 1
     else
         beta_mod = sqrt(L/K)
     end
     
     Deaths = μ_p*(σ + ((1-σ))*sqrt(L/K))
    
-    if t < int_start
+    if t < int_start #intervention
         Lambda = λ + la * cos((t + lo) * 2*pi/365)
     else
         Lambda = ttt*(λ + la * cos((t + lo) * 2*pi/365))
@@ -174,6 +167,59 @@ function asf_model_one_group(out,u,p,t)
     out[8] = γ * (1 - ρ) * I
     out[9] = R * Deaths
     out[10] = (1 / Lambda) * C
+    out[11] = κ * R 
+
+
+    nothing
+end
+
+
+function asf_model_one_log(out,u,p,t)
+    #ASF model for a single population (can make some speed increases) without farms! (LOGISTIC VERSION)!
+
+    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo, ty, ttt  = p 
+    
+    u[u.<0] .= 0
+    
+    S, E, I, R, C = u
+    N = sum(u)
+    L = S + E + I + R
+    if N == 0 
+        N = 1
+    end
+    if ty == 1
+        beta_mod = 1
+    elseif ty == 2
+        beta_mod = L/K
+    elseif ty == 3
+        beta_mod =  tanh(1.5 *L/K - 1.5) + 1
+    elseif ty == 4
+        beta_mod = sqrt(L/K)
+    end
+   
+    if t < int_start #intervention!
+        Lambda = λ + la * cos((t + lo) * 2*pi/365)
+    else
+        Lambda = ttt*(λ + la * cos((t + lo) * 2*pi/365))
+    end
+
+   
+    br =  birth_pulse_vector(t,k,bw,bo)
+    μ = 2/3*μ_p
+    r = br - μ
+    g = r/K
+    
+   #11 processes
+    out[1] = br*L
+    out[2] = (μ+g*L)*S
+    out[3] = beta_mod * β * (I + ω * C) * S / N
+    out[4] = (μ+g*L)*E
+    out[5] = ζ * E
+    out[6] = ρ * γ * I 
+    out[7] = I * (μ+g*L)
+    out[8] = γ * (1 - ρ) * I
+    out[9] = R * (μ+g*L)
+    out[10] = (1 / (Lambda)) * C
     out[11] = κ * R 
 
 
@@ -291,11 +337,26 @@ function model_int(par)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
         
-    #summary = summary_stat(sol)
-    data = reduce(vcat,transpose.(sol.u))
-    data[data .< 0 ] .= 0
-    #return summary[4]
-    return data
+    if force
+        data = reduce(vcat,transpose.(sol.u))
+        data[data .< 0 ] .= 0
+
+        s_d = data[:,1]
+        e_d = data[:,2]
+        i_d = data[:,3]
+        r_d = data[:,4]
+        c_d = data[:,5]
+
+        n_d = s_d+e_d+i_d+r_d
+
+        return s_d, n_d
+        
+    else
+        summary = summary_stat(sol)
+    
+        return summary[4] #if endemic! this is for intervention sims
+        
+    end
 end
 
 
