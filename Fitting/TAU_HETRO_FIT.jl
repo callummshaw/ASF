@@ -341,7 +341,7 @@ function burn_in_pop(params, U0)
     return U_burn
 end
 
-function model_1(par,path)
+function model_1(par,input_path, save_path)
     
     p1 = par["p1"]
     p2 = par["p2"]
@@ -368,15 +368,15 @@ function model_1(par,path)
     prob = DiscreteProblem(init_pop,Tspan,params)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
-    save_out(tester,path)
-
-   nothing
+    save_out(tester,save_path)
+    summary = summary_stat(sol)
+    return summary
     
 end
 
 
 
-function model_4(par, path)
+function model_4(par, input_path, save_path)
     
     p1 = par["p1"]
     p2 = par["p2"]
@@ -403,9 +403,9 @@ function model_4(par, path)
     prob = DiscreteProblem(init_pop,Tspan,params)
     jump_prob = JumpProblem(prob,Direct(),rj)
     sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
-    save_out(tester,path)
-
-   nothing
+    save_out(tester,save_path)
+    summary = summary_stat(sol)
+    return summary
 end
 
 function save_out(test,path)
@@ -415,9 +415,8 @@ function save_out(test,path)
 end
 
 function force_calc(I,C,N,K, test, beta_mod, β_i,β_o,populations, ω)
-    test.t += 1
     
-
+    test.t += 1
 
     Ib = copy(I)
     Is = copy(I)
@@ -432,11 +431,11 @@ function force_calc(I,C,N,K, test, beta_mod, β_i,β_o,populations, ω)
     Cs[K .== 1] .= 0
 
 
-    test.lb += mean((((beta_mod .* β_o ) ./ populations)*(Ib)).+ (β_i  ./ N) .* (Ib))
-    test.ls += mean((((beta_mod .* β_o ) ./ populations)*(Is)).+ (β_i  ./ N) .* (Is))
+    test.lb += mean(((beta_mod .* β_o ) ./ populations)*(Ib))
+    test.ls += mean(((beta_mod .* β_o ) ./ populations)*(Is))
 
-    test.cb += mean((((beta_mod .* β_o ) ./ populations)*(ω .* Cb)).+ (β_i  ./ N) .* (ω .* Cb))
-    test.cs += mean((((beta_mod .* β_o ) ./ populations)*(ω .* Cs)).+ (β_i  ./ N) .* (ω .* Cs))
+    test.cb += mean(((beta_mod .* β_o ) ./ populations)*(ω .* Cb))
+    test.cs += mean(((beta_mod .* β_o ) ./ populations)*(ω .* Cs))
 
 end
 

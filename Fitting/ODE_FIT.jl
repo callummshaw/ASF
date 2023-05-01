@@ -240,35 +240,10 @@ function model_1(par)
     
     prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day),params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
-        
-    #summary = summary_stat(sol)
-    #return Dict("SS"=>summary)
-    data = reduce(vcat,transpose.(sol.u))
-    data[data .< 0 ] .= 0
-
-    nt = 3*365
+    summary = summary_stat(sol)
+    fi, fc = forces(sol,p1,p2,1)
     
-    s_d = data[nt:end,1]
-    e_d = data[nt:end,2]
-    i_d = data[nt:end,3]
-    r_d = data[nt:end,4]
-    c_d = data[nt:end,5]
-   
-    p = s_d + e_d + i_d + r_d
-    
-    
-    c4 = 1
-    
-    inf_pop = e_d + i_d + c_d
-    
-    if inf_pop[end] > 1
-        fi = p1*mean(c4 .* i_d ./ p) 
-        fc = p1*p2*mean(c4 .* c_d ./ p) 
-    else
-        fi = 9999
-        fc = 9999
-    end
-    return fi, fc
+    return summary, fi, fc
 
 end
 
@@ -284,25 +259,10 @@ function model_2(par)
     
     prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
-        
-    #summary = summary_stat(sol)
-    #return Dict("SS"=>summary)
-    data = reduce(vcat,transpose.(sol.u))
-    data[data .< 0 ] .= 0
-    nt = 3*365
+    summary = summary_stat(sol)
+    fi, fc = forces(sol,p1,p2,2)
     
-    s_d = data[nt:end,1]
-    e_d = data[nt:end,2]
-    i_d = data[nt:end,3]
-    r_d = data[nt:end,4]
-    c_d = data[nt:end,5]
-   
-    p = s_d + e_d + i_d + r_d
-    
-    
-    fi = p1*mean(i_d)/mean(p) 
-    fc = p1*p2*mean(c_d)/mean(p)
-    return fi, fc
+    return summary, fi, fc
 
 end
 
@@ -319,19 +279,10 @@ function model_3(par)
     
     prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
-        
-   #summary = summary_stat(sol)
-    #return Dict("SS"=>summary)
-    data = reduce(vcat,transpose.(sol.u))
-    data[data .< 0 ] .= 0
-
-    s_d = data[:,1]
-    e_d = data[:,2]
-    i_d = data[:,3]
-    r_d = data[:,4]
-    c_d = data[:,5]
+    summary = summary_stat(sol)
+    fi, fc = forces(sol,p1,p2,3)
     
-    return s_d, e_d, i_d, r_d, c_d
+    return summary, fi, fc
     
 end
 
@@ -348,36 +299,55 @@ function model_4(par)
     
     prob_ode = ODEProblem(asf_model_ode, u0, (start_day,n_years*365.0+start_day), params)
     sol = solve(prob_ode, saveat = 1,reltol=1e-8)
-    #summary = summary_stat(sol)
-    #return Dict("SS"=>summary)
-    data = reduce(vcat,transpose.(sol.u))
-    data[data .< 0 ] .= 0
-
-    nt = 3*365
+    summary = summary_stat(sol)
+    fi, fc = forces(sol,p1,p2,4)
     
-    s_d = data[nt:end,1]
-    e_d = data[nt:end,2]
-    i_d = data[nt:end,3]
-    r_d = data[nt:end,4]
-    c_d = data[nt:end,5]
-   
-    p = s_d + e_d + i_d + r_d
-    NK = p./5000
-    c4 = sqrt.(NK)
-    
-    inf_pop = e_d + i_d + c_d
-    
-    if inf_pop[end] > 1
-        fi = p1*mean(c4 .* i_d ./ p) 
-        fc = p1*p2*mean(c4 .* c_d ./ p) 
-    else
-        fi = 9999
-        fc = 9999
-    end
-    
-    return fi, fc
+    return summary, fi, fc
     
 end
+
+function forces(sol,p1,p2,ty)
+    
+        K = 5000
+    
+        data = reduce(vcat,transpose.(sol.u))
+        data[data .< 0 ] .= 0
+
+        nt = 3*365
+
+        s_d = data[nt:end,1]
+        e_d = data[nt:end,2]
+        i_d = data[nt:end,3]
+        r_d = data[nt:end,4]
+        c_d = data[nt:end,5]
+
+        p = s_d + e_d + i_d + r_d
+    
+    
+    
+        if ty == 1
+            cf = 1
+        elseif ty == 2
+            cf = p./K
+        elseif ty == 3
+            cf =  tanh.(1.5 *p./K .- 1.5 ) .+ 1
+        elseif ty == 4
+            cf = sqrt.(p./K)
+        end
+
+        inf_pop = e_d + i_d + c_d
+
+        if inf_pop[end] > 1
+            fi = p1*mean(cf .* i_d ./ p) 
+            fc = p1*p2*mean(cf .* c_d ./ p) 
+        else
+            fi = 9999
+            fc = 9999
+        end
+       
+        
+        return fi, fc
+    end
 
 
 end
