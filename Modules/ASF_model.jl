@@ -120,12 +120,12 @@ end
 function asf_model_one(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
-    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area    = p 
+     β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area = p 
     ref_density = 1 #baseline density (from Baltics where modelled was fitted)
     year = 365 #days in a year
 
     u[u.<0] .= 0
-    
+   
     S = Vector{UInt8}(u[1:5:end])
     E = Vector{UInt8}(u[2:5:end])
     I = Vector{UInt8}(u[3:5:end])
@@ -140,14 +140,15 @@ function asf_model_one(out,u,p,t)
     tg = length(Np) #total groups in all populations
     tp = sum(Np) # total living pigs
 
-    Density = sqrt((tp/Area)/ref_density) #density of population for beta
-    Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(Np)./sqrt.(K))*g
+    KT = sum(K)
+    beta_mod = sqrt.(abs.(tp/KT))
     
-
-    Lambda = λ + la * cos((t + lo) * 2*pi/year)
+    Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(abs.(Np))./sqrt.(abs.(K)))*g
+    
+    Lambda = λ + la * cos.((t + lo) * 2*pi/year)
 
     p_mag = birth_pulse_vector(t,k,bw,bo)
-    Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(Np .* K))#Np.^(1-θ) .* K.^θ)
+    Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(abs.(Np .* K)))#Np.^(1-θ) .* K.^θ)
     
     #now stopping boar births
     mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
@@ -155,7 +156,6 @@ function asf_model_one(out,u,p,t)
     Births[mask_boar] .= 0
     mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive 
     Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
-     
     
     n_empty  = sum(Np .== 0 )   
     
@@ -184,10 +184,10 @@ function asf_model_one(out,u,p,t)
     populations  = v*N'+ N*v'
     
     populations[diagind(populations)] = N
-
+    
     out[1:11:end] .= Births
     out[2:11:end] .= S.*Deaths
-    out[3:11:end] .=  (((Density .* β_o .* S) ./ populations)*(I .+ ω .* C)).+ β_i .* (S ./ N) .* (I .+ ω .* C)
+    out[3:11:end] .=  (((beta_mod .* β_o .* S) ./ populations)*(I .+ ω .* C)).+ β_i .* (S ./ N) .* (I .+ ω .* C)
     out[4:11:end] .= E.*Deaths
     out[5:11:end] .= ζ .* E
     out[6:11:end] .= ρ .* γ .* I 
@@ -196,6 +196,7 @@ function asf_model_one(out,u,p,t)
     out[9:11:end] .= R.*Deaths
     out[10:11:end].= (1 ./ Lambda) .* C
     out[11:11:end] .= κ .* R 
+    
 
 
     nothing
@@ -211,16 +212,20 @@ function asf_model_one_group(out,u,p,t)
     S, E, I, R, C = u
     N = sum(u)
     L = S + E + I + R
+    
+    if N == 0 
+        N = 1
+    end
+   
     beta_mod = sqrt(L/K)
+   
     
     Deaths = μ_p*(σ + ((1-σ))*sqrt(L/K))
    
-    Lambda = λ + la * cos((t + lo) * 2*pi/365)
-
     p_mag = birth_pulse_vector(t,k,bw,bo)
     Births = p_mag*(σ *L + ((1-σ))*sqrt(L*K))
     
-   
+    #11 processes
     out[1] = Births
     out[2] = S * Deaths
     out[3] = beta_mod * β * (I + ω * C) * S / N
@@ -233,7 +238,6 @@ function asf_model_one_group(out,u,p,t)
     out[10] = (1 / Lambda) * C
     out[11] = κ * R 
 
-
     nothing
 end
 
@@ -241,18 +245,22 @@ end
 function asf_model_ode(du,u,p,t)
     #ode equivelent of our ASF model
     β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo  = p 
-    #u[u.<0] .= 0
+    
     S, E, I, R, C = u
     N = sum(u)
     L = S + E + I + R
+    
     beta_mod = sqrt(L/K)
+    
     ds = μ_p*(σ + ((1-σ))*sqrt(L/K))
+    
+    lam = 1/( λ + la * cos((t + lo) * 2*pi/365))
     
     du[1] = k*exp(-bw*cos(pi*(t+bo)/365)^2)*(σ .* L .+ ((1-σ)) .* sqrt.(L .* K)) + κ*R - ds*S - beta_mod*β*(I + ω*C)*S/N
     du[2] = beta_mod*β*(I + ω*C)*S/N - (ds + ζ)*E
     du[3] = ζ*E - (ds + γ)*I
     du[4] = γ*(1-ρ)*I - (ds + κ)*R
-    du[5] = (ds + γ*ρ)*I -1/( λ + la * cos((t + lo) * 2*pi/365))*C
+    du[5] = (ds + γ*ρ)*I -lam*C
     
     nothing
 end
