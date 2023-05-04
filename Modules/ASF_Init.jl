@@ -1,5 +1,6 @@
 module ASF_Init
 
+using Random
 using DifferentialEquations
 using LinearAlgebra
 using SparseArrays 
@@ -12,13 +13,15 @@ function burn_population(sim,pops, S0,Parameters)
     Mn = sim.Model
 
     if Mn == 3
+        println(sum(S0))
         S1 = burn_m3(sim,S0, Parameters)
+        println(sum(S1))
     else
         S1 = burn_m1m2(sim,S0, Parameters)
     end
     
     U1 = seed_ASF(sim,pops, Parameters, S1)
-
+    
     return U1
 end
 
@@ -31,29 +34,29 @@ function seed_ASF(sim,pops, Parameters, S1)
     n_classes = 5 #number of different classes
 
     if Mn != 3 #seedingin in single "group"
-
+        K = K[1]
         data = pops[1]
         
         U1 = zeros(n_classes)
 
-        p_e = data.Npe #percentage of K that are exposed!
-        p_i = data.Npe #percentage of K that are infected!
+        p_e = data.N_e[1] #percentage of K that are exposed!
+        p_i = data.N_i[1] #percentage of K that are infected!
         
-        if p_e _+ p_i > 1
+        if (p_e + p_i) > 1
             @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
             p_e = 0.01
             p_i = 0.01
         end
-
+       
         ne = K*p_e
         ni = K*p_i
-
+        
         U1[1] = S1[1] - ne - ni
         U1[2] = ne
         U1[3] = ni
 
     else #seeding in network!
-        counts = Parameters.Population
+        counts = Parameters.Populations
         
         n_pop = counts.pop #number of populations
         n_inf = counts.inf #population we will seed with asf!
@@ -79,8 +82,8 @@ function seed_ASF(sim,pops, Parameters, S1)
 
         for (i, data) in enumerate(pops)
             
-            p_e = data.Npe #percentage of groups that are exposed!
-            p_i = data.Npe #percentage of groups that are infected!
+            p_e = data.N_e[1] #percentage of K that are exposed!
+            p_i = data.N_i[1] #percentage of K that are infected!
             
             p_ei = p_e + p_i
 
@@ -92,9 +95,10 @@ function seed_ASF(sim,pops, Parameters, S1)
             end
             
             Tg = n_cs[i+1]-n_cs[i]
-            u1 = zeros(Int32,N_class*Tg) #group pops for Population i
+            u1 = zeros(Int32,5*Tg) #group pops for Population i
             u1[1:5:end] = S1[n_cs[i]+1:n_cs[i+1]] #assigning our S values
             
+
             if i == n_inf #in seeded population!
                 
                 n_seed = trunc(Int16,Tg*(p_ei))  #number of groups we will seed ASF in!
@@ -104,10 +108,10 @@ function seed_ASF(sim,pops, Parameters, S1)
                 netw = Parameters.β_d[:,rr] #connected populations to randomly selected group
                 cons = findall(>(0), netw)
                 
-                asf_groups = Vector{Int16}
+                asf_groups = zeros(Int16,0)
                 append!(asf_groups,rr)
                 
-                n_seed = length(n_cons) #number of connections(populations we will seed in)
+                n_cons = length(asf_groups) #number of connections(populations we will seed in)
                 
                 if n_cons == (n_seed -1) #there are exactly the right ammount of connections!
                 
@@ -150,10 +154,10 @@ function seed_ASF(sim,pops, Parameters, S1)
                     
                 end 
                 
-                for i in asf_groups #now seeding in all the groups we want!
-                    g_p = K[i] #group carrying capacity
-                    
-                    ra = i -1 #needed for indexing!
+                for j in asf_groups #now seeding in all the groups we want!
+                    g_p = K[j] #group carrying capacity
+                    init_pop = S1[j]
+                    ra = j -1 #needed for indexing!
                     
                     if g_p > 1 #sow population! (Asumming whole population infected or exposed!)
                         
@@ -174,10 +178,7 @@ function seed_ASF(sim,pops, Parameters, S1)
                         end
                     end
                 end
-
-
-            else #not in seeded population!
-                u1[1:5:end] = S1[n_cs[i]+1:n_cs[i+1]] #simply re-assign our S values into our U vector!
+               
             end
 
 
@@ -206,23 +207,25 @@ function burn_m3(sim,S0, PP)
     dc[0*NG+1:eqs*NG+1:end] .=  1
     dc[1*NG+1:eqs*NG+1:end] .= -1
 
-    params = [PP.β_b[1], PP.μ_p[1], PP.K[1], 0, PP.θ[1], PP.g[1], PP.bw[1], PP.bo[1], PP.k[1]]
+    function regular_c(du,u,p,t,counts,mark)  
+        mul!(du,dc,counts)
+        nothing
+    end
+
+    params = [PP.β_b, PP.μ_p[1], PP.K, 0, PP.θ[1], PP.g[1], PP.bw[1], PP.bo[1], PP.k[1]]
     
     rj_burn = RegularJump(asf_model_burn_multi, regular_c, eqs*NG)
     prob_burn = DiscreteProblem(S0,tspan,params)
-    jump_prob_burn = JumpProblem(prob_burn, Direct(), rj_burn)
-    sol_burn = solve(jump_prob_burn, SimpleTauLeaping(),dt=1, saveat = ny*365+sim.S_day);
+    jump_prob_burn = JumpProblem(prob_burn, Direct(), rj_burn)    
+    sol_burn = solve(jump_prob_burn, SimpleTauLeaping(),dt=1);
 
     S1 = reduce(vcat,transpose.(sol_burn.u))[end,:]
-
+   
     return S1
 end
 
 
-function regular_c(du,u,p,t,counts,mark)  
-    mul!(du,dc,counts)
-    nothing
-end
+
 
 
 function burn_m1m2(sim,U0, PP)
@@ -230,22 +233,21 @@ function burn_m1m2(sim,U0, PP)
     ny = 10 #will allow for 10 years spinup time
     tspan = (0.0,ny*365+sim.S_day)
     params = [PP.μ_p[1],PP.K[1],0,PP.bw[1],PP.bo[1], PP.k[1]] #\simga = 0 allows for faster return to correct K!
-    Y0 = U0[1] #only need to run on S, so can not use others!
-    prob_ode = ODEProblem(asf_model_burn_single, Y0, tspan,params)
+     #only need to run on S, so can not use others!
+    prob_ode = ODEProblem(asf_model_burn_single, U0, tspan,params)
     sol = solve(prob_ode, saveat = ny*365+sim.S_day,reltol=1e-8)
     
-    return sol.u[2] #our final pop!
+    return trunc.(Int16,sol.u[2]) #our final pop!
 end
 
 function asf_model_burn_single(du,u,p,t)
     #ode equivelent of our ASF model
     μ_p, K, σ, bw, bo, k  = p 
-    
-    S = u
 
+    S = u[1]
     ds = μ_p*(σ + ((1-σ))*sqrt(S/K))
-        
-    du[1] = k*exp(-bw*cos(pi*(t+bo)/365)^2)*(σ .* S .+ ((1-σ)) .* sqrt.(S .* K)) - ds*S
+       
+    du[1] = k*exp(-bw*cos(pi*(t+bo)/365)^2)*(σ * S + ((1-σ)) * sqrt(S * K)) - ds*S
     
     nothing
 end
@@ -254,21 +256,19 @@ function asf_model_burn_multi(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
     β_b, μ_p, K, σ, θ, g, bw, bo, k  = p 
-    
+   
     
     u[u.<0] .= 0
+    
     tg = length(u)
     
     p_mag = birth_pulse_vector(t,k,bw,bo)
-
-    if θ == 0.5 #density births and death!
-        Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(abs.(Np./K)))*g #rate
-        Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(abs.(Np .* K)))#total! (rate times NP)
-    else
-        Deaths = μ_p.*(σ .+ ((1-σ)).*(Np./K).^θ)*g #rate
-        Births = p_mag.*(σ .* Np .+ ((1-σ)) .* Np.^(1-θ) .* K.^θ)#total! (rate times NP)
-    end
-
+   
+ 
+    Deaths = μ_p.*(σ .+ (1-σ).*sqrt.(u./K))*g#rate
+    Births = p_mag.*(σ .* u .+ ((1-σ)) .* sqrt.(abs.(u .* K)))#total! (rate times NP)
+   
+   
     #now stopping boar births
     mask_boar = (K .== 1) .& (u .> 0) #boars with a positive population
     boar_births = p_mag*sum(mask_boar)
@@ -276,10 +276,11 @@ function asf_model_burn_multi(out,u,p,t)
     mask_p_s = (u .> 1) .& (K .> 1) #moving it to postive 
     Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
     
+    
+
     n_empty  = sum(u .== 0 ) 
     n_r = (n_empty/tg)^2
-    
-    
+
     if (n_empty/tg) > 0.01
         
         dd = copy(u)
@@ -295,6 +296,7 @@ function asf_model_burn_multi(out,u,p,t)
         Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
 
     end 
+   
     out[1:2:end] .= Births
     out[2:2:end] .= u.*Deaths
    

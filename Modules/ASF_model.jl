@@ -141,15 +141,26 @@ function asf_model_one(out,u,p,t)
     tp = sum(Np) # total living pigs
 
     KT = sum(K)
-    beta_mod = sqrt.(abs.(tp/KT))
-    
-    Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(abs.(Np))./sqrt.(abs.(K)))*g
-    
-    Lambda = λ + la * cos.((t + lo) * 2*pi/year)
 
-    p_mag = birth_pulse_vector(t,k,bw,bo)
-    Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(abs.(Np .* K)))#Np.^(1-θ) .* K.^θ)
     
+    beta_mod = abs.(tp/KT).^η
+    
+    if Seasonal    
+        Lambda = λ + la * cos.((t + lo) * 2*pi/year) #decay
+        p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
+    else 
+        Lambda = λ
+        p_mag = μ_p
+    end
+
+    if θ == 0.5 #density births and death!
+        Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(abs.(Np./K)))*g #rate
+        Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(abs.(Np .* K)))#total! (rate times NP)
+    else
+        Deaths = μ_p.*(σ .+ ((1-σ)).*(Np./K).^θ)*g #rate
+        Births = p_mag.*(σ .* Np .+ ((1-σ)) .* Np.^(1-θ) .* K.^θ)#total! (rate times NP)
+    end
+
     #now stopping boar births
     mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
     boar_births = p_mag*sum(mask_boar)
@@ -219,6 +230,7 @@ function asf_model_one_group(out,u,p,t)
    
     beta_mod = sqrt(L/K)
    
+    Lambda = 1/( λ + la * cos((t + lo) * 2*pi/365))
     
     Deaths = μ_p*(σ + ((1-σ))*sqrt(L/K))
    

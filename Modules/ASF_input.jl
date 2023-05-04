@@ -6,6 +6,9 @@ using Graphs
 using QuadGK
 using CSV
 using DataFrames
+
+include("ASF_Init.jl")
+
 export Model_Data
 
 const year = 365 
@@ -26,7 +29,7 @@ struct Meta_Data <: Data_Input
     Identical::Bool #if we params to be drawn from dist or just means of dist
     Seasonal::Bool #If model is seasonal
     N_Pop::Int8 #number of populations, must match the number of population files in input
-    N_Inf::Vector{Int8} #number of populations init with ASF
+    N_Inf::Int8 #number of populations init with ASF
     N_Seed::Int8 #population we will seed with
     C_Type::String #what kind of connection we want to init with between populations, line (l), circular (c), total (t), or off (o)
     C_Str::Float32 #strength of the connections between populations, note this is only for l,c,t
@@ -34,15 +37,19 @@ struct Meta_Data <: Data_Input
     N_param::Float32 #Network parameter (only for small worlds)
     
     function Meta_Data(input, numv, verbose)
-
+       
         Mn = parse(Int8, input.Value[1])
-        F = (input.Value[5] == "true")
+       
+        F = (input.Value[2] == "true")
+       
         Ny = parse(Int16, input.Value[3])
+      
         Ne = parse(Int16,input.Value[4])
+       
         I  = (input.Value[5] == "true")
         S  = (input.Value[6] == "true")
         Np = parse(Int8, input.Value[7])
-        Ni = numv
+        Ni = parse(Int8, input.Value[8])
         Ns = parse(Int16, input.Value[9])
         Ct = input.Value[10]
         Cs = parse(Float32, input.Value[11])
@@ -253,7 +260,7 @@ mutable struct Network_Data
     total::Vector{Int16}
     cum_sum::Vector{Int16}
     
-    inf::Vector{Int8}
+    inf::Int8
     
     density::Vector{Float32}
     area::Vector{Float32}
@@ -262,6 +269,8 @@ mutable struct Network_Data
         n = size(feral)[1]
         t = feral + farm
         cs = pushfirst!(cumsum(t),0)
+        
+
         new(feral,farm,n,t,cs, inf, density, area)
     end
 end 
@@ -315,8 +324,9 @@ struct Model_Data
     #=
     Structure to store key data on mode
     =#
+    MN::Int8 #which model we are running with (1- ODE, 2-Tau Homogeneous, 3-Tau Heterogeneous)
     Time::Tuple{Float32, Float32} #Model run time
-    NR::Int16
+    NR::Int16 #number of runs in ensemble!
     U0::Vector{Int16} #Initial Population
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
@@ -324,9 +334,9 @@ struct Model_Data
     function Model_Data(Path; verbose = false, fitting_rewire = 0)
         #custom_network parameter used for fitting!
         sim, pops, sea = read_inputs(Path, verbose)
-     
+
         Time = (sim.S_day,sim.years*365+sim.S_day)
-       
+
         #now building feral pig network
         network, counts = build_network(sim, pops, fitting_rewire, verbose) 
         
@@ -335,9 +345,9 @@ struct Model_Data
      
         Parameters = Model_Parameters(sim, pops, sea, S0, counts, network)
     
-        U0 = burn_population(sim,pops, S0,Parameters) #burn in pop to desired start day and seed desired ASF!
+        U0 = ASF_Init.burn_population(sim,pops, S0,Parameters) #burn in pop to desired start day and seed desired ASF!
       
-        new(Time, sim.N_ensemble, U0, Parameters, pops)
+        new(sim.Model,Time, sim.N_ensemble, U0, Parameters, pops)
         
     end
     
@@ -467,7 +477,7 @@ function build_network(sim, pops, cn, verbose)
 
         feral_pops[1] = 1 #only 1 large group!
         farm_pops[1] = 0 #no farms(yet...)
-        network[1] = [1]
+        network[1] = [1][:,:]
         
     end
 
@@ -551,6 +561,7 @@ function parameter_build(sim, pops, sea, init_pops, counts)
     =#
     
     K = init_pops #carrying capacity of each group
+    
     n_pops = sim.N_Pop
 
     # All other params
@@ -696,12 +707,11 @@ function read_inputs(path, verbose)
     -pops, data on n populations used in the model
     -seasonal, seaonal data on the n populations 
     =#
-
     Simulation = CSV.read("$(path)/Simulation_Data.csv", DataFrame; comment="#") #reading in simulation meta data
     
-    n_inf  = infected_populations(Simulation) #what population is seeded with ASF
-        
-    Sim = Meta_Data(Simulation,n_inf, verbose)
+    n_inf  = 1#infected_populations(Simulation) #what population is seeded with ASF (custom population!)
+
+    Sim = Meta_Data(Simulation, n_inf, verbose)
     
     Pops = Vector{Population_Data}(undef, Sim.N_Pop)
     Seasons = Vector{Seasonal_effect}(undef, Sim.N_Pop)
@@ -802,8 +812,9 @@ function premade_connections(type_c, Ni)
 end
 
 function infected_populations(input)
-    number_pops  = parse(Int8, input.Value[5]) #number of populations 
-    number_seeded = parse(Int8, input.Value[6]) #number of populations seeded with ASF
+
+    number_pops  = parse(Int8, input.Value[7]) #number of populations 
+    number_seeded = parse(Int8, input.Value[8]) #number of populations seeded with ASF
     con_type = input.Value[8]
 
     if (con_type == "o") & (number_pops > 1) #for runs with 2+ populations can choose what population we seed if custom
@@ -901,8 +912,8 @@ function beta_construction(sim, pops, counts, network)
                 df_beta_intra = Array(CSV.read(path*"/contact_in.csv", DataFrame, header=false))
                 df_beta_inter = Array(CSV.read(path*"/contact_out.csv", DataFrame, header=false))
 
-                beta_intra  = df_beta_intra[rand_values[1]]
-                beta_inter = df_beta_inter[rand_values[2]]
+                beta_intra  = df_beta_intra[rand_values[1]][1]
+                beta_inter = df_beta_inter[rand_values[2]][1]
 
                 beta_pop[beta_pop .== 100] .= beta_intra #intra feral
                 beta_pop[beta_pop .== 200] .= beta_inter #inter feral
@@ -929,7 +940,8 @@ function beta_construction(sim, pops, counts, network)
             rand_values = rand(1:10000,1)
 
             df_beta = Array(CSV.read(path, DataFrame, header=false))
-            beta_intra  = df_beta[rand_values]
+            beta_intra  = df_beta[rand_values][1]
+            
             beta[1] = beta_intra
         end
     else #ODE MODEL
@@ -948,7 +960,7 @@ function beta_construction(sim, pops, counts, network)
             rand_values = rand(1:10000,1)
 
             df_beta = Array(CSV.read(path, DataFrame, header=false))
-            beta_intra  = df_beta[rand_values]
+            beta_intra  = df_beta[rand_values][1]
             beta[1] = beta_intra
         end
     end 
@@ -978,6 +990,7 @@ function build_populations(sim, pops, network, counts)
     min_group_size = 3
     
     if MN == 3
+        
         for i in 1:N_pop #looping through all populations
             
             #population data
@@ -1009,8 +1022,8 @@ function build_populations(sim, pops, network, counts)
             index_sow = setdiff(1:N_feral, index_boar) #index of all sow groups
             
 
-            s_pop[index_boar] = sow_groups
-            s_pop[index_sow] .= 1
+            s_pop[index_sow] = sow_groups
+            s_pop[index_boar] .= 1
         
             
             total_pop = sum(s_pop)
@@ -1033,10 +1046,10 @@ function build_populations(sim, pops, network, counts)
     else
         
         data = pops[1]
-        n_g = data.N_feral #number of feral groups (assuming M3)
+        n_g = data.N_feral[1] #number of feral groups (assuming M3)
         b_p = data.Boar_p[1] #percentage of groups that are solitary boar\
-        s_g = data.N_f #sow group size
-
+        s_g = data.N_f[1] #sow group size
+       
         homogeneous_pop = n_g*b_p + s_g*n_g*(1-b_p)
         
         s_total = [homogeneous_pop]
@@ -1063,47 +1076,5 @@ function birthpulse_norm(s, DT)
     
     return k
 end
-
-
-
-#= if i in p_i #population that have ASF in a group
-
-    group_index = N_class*((1:N_feral) .- 1) .+ 1 #index of S for all groups
-    seeded_groups = unique(rand(group_index,n_seed)) #index of S for all groups that are seeded with ASF!
-
-    sow_inf = seeded_groups[seeded_groups .∈  [index_sow_pop]] #sow groups that are seeded
-    boar_inf = seeded_groups[seeded_groups .∈  [index_boar_pop]] #boar groups that are seeded
-
-    n_si = length(sow_inf)
-   
-    #Disease Free Groups
-    disease_free_sows = setdiff(index_sow_pop,sow_inf)
-    disease_free_boars = setdiff(index_boar_pop,boar_inf)
-    
-
-    y_pop[disease_free_sows] = sow_groups[n_si+1:end]
-    y_pop[disease_free_boars] .= 1 
-
-    #Now the dieased group(s)!
-    
-    #for sows
-    d_e = TruncatedNormal(data.N_e[1],data.N_e[2], 1, 100) #dist for number of pigs exposed
-    d_i = TruncatedNormal(data.N_i[1],data.N_i[2], 1, 100) #dist for number of pigs infected
-            
-    t_e = round.(Int16,rand(d_e,n_si)) #number of exposed in infected sow groups
-    t_i = round.(Int16,rand(d_i,n_si)) #number of infected in infected sow groups
-            
-    t_pop = sow_groups[1:n_si] #expected total population of infected sow groups
-
-    y_pop[sow_inf] = max.(0,t_pop-t_e-t_i) #S
-    y_pop[sow_inf .+ 1] = t_e #E
-    y_pop[sow_inf .+ 2] = t_i #I
-
-    #for boars
-    #I am assuming that all boars will be infective
-
-    y_pop[boar_inf .+ 2] .=  =#1 
-    
-    
 
 end
