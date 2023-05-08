@@ -4,20 +4,14 @@ using LinearAlgebra
 using Distributions
 using SparseArrays
 
-export asf_model_pop
-export asf_model_full
-export asf_model_one
-export asf_model_ode
-export asf_model_one_group
-
-export convert
-export convert_single
-
-export reparam!
+export ASF_M3
+export ASF_M3S
+export ASF_M2
+export ASF_M1
 
 
 
-function asf_model_full(out,u,p,t)
+function ASF_M3(out,u,p,t)
 
     ref_density = 1 #baseline density (from Baltics where modelled was fitted)
     offset = 180 #seeding in the summer!
@@ -117,10 +111,10 @@ function asf_model_full(out,u,p,t)
     nothing
 end
 
-function asf_model_one(out,u,p,t)
+function ASF_M3S(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
-     β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area = p 
+    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area = p 
     ref_density = 1 #baseline density (from Baltics where modelled was fitted)
     year = 365 #days in a year
 
@@ -213,29 +207,38 @@ function asf_model_one(out,u,p,t)
     nothing
 end
 
-function asf_model_one_group(out,u,p,t)
+function ASF_M2(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
-    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo  = p 
+    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, Seasonal, bw, bo, k, la, lo, Area = p 
     
     u[u.<0] .= 0
     
     S, E, I, R, C = u
     N = sum(u)
-    L = S + E + I + R
+    Np = S + E + I + R
     
     if N == 0 
         N = 1
     end
    
-    beta_mod = sqrt(L/K)
-   
-    Lambda = 1/( λ + la * cos((t + lo) * 2*pi/365))
+    beta_mod = abs.(tp/KT).^η
     
-    Deaths = μ_p*(σ + ((1-σ))*sqrt(L/K))
-   
-    p_mag = birth_pulse_vector(t,k,bw,bo)
-    Births = p_mag*(σ *L + ((1-σ))*sqrt(L*K))
+    if Seasonal    
+        Lambda = λ + la * cos.((t + lo) * 2*pi/year) #decay
+        p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
+    else 
+        Lambda = λ
+        p_mag = μ_p
+    end
+
+    if θ == 0.5 #density births and death!
+        Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(abs.(Np./K)))*g #rate
+        Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(abs.(Np .* K)))#total! (rate times NP)
+    else
+        Deaths = μ_p.*(σ .+ ((1-σ)).*(Np./K).^θ) #rate
+        Births = p_mag.*(σ .* Np .+ ((1-σ)) .* Np.^(1-θ) .* K.^θ)#total! (rate times NP)
+    end
     
     #11 processes
     out[1] = Births
@@ -254,134 +257,39 @@ function asf_model_one_group(out,u,p,t)
 end
 
 
-function asf_model_ode(du,u,p,t)
+function ASF_M1(du,u,p,t)
+    
     #ode equivelent of our ASF model
-    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, bw, bo, k, la, lo  = p 
+    β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, Seasonal, bw, bo, k, la, lo, Area = p 
     
     S, E, I, R, C = u
     N = sum(u)
-    L = S + E + I + R
+    Np = S + E + I + R
     
-    beta_mod = sqrt(L/K)
+    beta_mod = abs.(tp/KT).^η
     
-    ds = μ_p*(σ + ((1-σ))*sqrt(L/K))
+    if Seasonal    
+        Lambda = λ + la * cos.((t + lo) * 2*pi/year) #decay
+        p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
+    else 
+        Lambda = λ
+        p_mag = μ_p
+    end
+
+    if θ == 0.5 #density births and death!
+        ds = μ_p.*(σ .+ ((1-σ)).*sqrt.(abs.(Np./K)))*g #rate
+        Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(abs.(Np .* K)))#total! (rate times NP)
+    else
+        ds = μ_p.*(σ .+ ((1-σ)).*(Np./K).^θ) #rate
+        Births = p_mag.*(σ .* Np .+ ((1-σ)) .* Np.^(1-θ) .* K.^θ)#total! (rate times NP)
+    end
     
-    lam = 1/( λ + la * cos((t + lo) * 2*pi/365))
-    
-    du[1] = k*exp(-bw*cos(pi*(t+bo)/365)^2)*(σ .* L .+ ((1-σ)) .* sqrt.(L .* K)) + κ*R - ds*S - beta_mod*β*(I + ω*C)*S/N
+    du[1] = Births + κ*R - ds*S - beta_mod*β*(I + ω*C)*S/N
     du[2] = beta_mod*β*(I + ω*C)*S/N - (ds + ζ)*E
     du[3] = ζ*E - (ds + γ)*I
     du[4] = γ*(1-ρ)*I - (ds + κ)*R
-    du[5] = (ds + γ*ρ)*I -lam*C
+    du[5] = (ds + γ*ρ)*I -(1/Lambda)*C
     
-    nothing
-end
-
-function convert(input)
-    #Function to convert input structure to simple array (used mainly for fitting)
-    params = Vector{Any}(undef,22)
-    
-    beta = copy(input.β)
-    beta_con = copy(input.β_b)
-
-    params[1]  = beta[diagind(beta)]
-    params[2]  = beta.*beta_con
-    params[3]  = copy(input.β_d)
-    
-    params[4]  = copy(input.μ_p)
-    params[5]  = copy(input.K)
-    params[6]  = copy(input.ζ[1])
-    params[7]  = copy(input.γ[1])
-    params[8]  = copy(input.ω[1])
-    params[9] = copy(input.ρ[1])
-    params[10] = copy(input.λ[1])
-    params[11] = copy(input.κ[1])
-    
-    params[12] = copy(input.σ[1])
-    params[13] = copy(input.θ[1])
-    params[14] = copy(input.η[1])
-    params[15] = copy(input.g[1])
-
-    params[16] = copy(input.Seasonal)
-    params[17] = copy(input.bw[1])
-    params[18] = copy(input.bo[1])
-    params[19] = copy(input.k[1])
-    params[20] = copy(input.la[1])
-    params[21] = copy(input.lo[1])
-    
-    params[22] = copy(input.Populations.area[1])
-    return params
-end
-function convert_single(input)
-    #Function to convert input structure to simple array (used mainly for fitting)
-    params = Vector{Any}(undef,15)
-    
-    params[1]  = copy(input.β[1])
-    params[2]  = copy(input.μ_p[1])
-    params[3]  = copy(input.K[1])
-    params[4]  = copy(input.ζ[1])
-    params[5]  = copy(input.γ[1])
-    params[6]  = copy(input.ω[1])
-    params[7] = copy(input.ρ[1])
-    params[8] = copy(input.λ[1])
-    params[9] = copy(input.κ[1])
-    params[10] = copy(input.σ[1])
-    params[11] = copy(input.bw[1])
-    params[12] = copy(input.bo[1])
-    params[13] = copy(input.k[1])
-    params[14] = copy(input.la[1])
-    params[15] = copy(input.lo[1])
-    
-    return params
-end
-function asf_model_pop(out,u,p,t)
-    #ASF model for a single population (can make some speed increases) without farms!
-
-    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area  = p 
-    
-    
-    year = 365 #days in a year
-
-    u[u.<0] .= 0
-    
-    S = Vector{UInt32}(u[1:5:end])
-    
-    tg = length(S)
-    
-    p_mag = birth_pulse_vector(t,k,bw,0)
-    Births = p_mag.*(σ .* S .+ ((1-σ)) .* sqrt.(S .* K))#S.^(1-θ) .* K.^θ)
-    
-    #now stopping boar births
-    mask_boar = (K .== 1) .& (S .> 0) #boars with a positive population
-    boar_births = p_mag*sum(mask_boar)
-    Births[mask_boar] .= 0
-    mask_p_s = (S .> 1) .& (K .> 1) #moving it to postive 
-    Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
-     
-    
-    n_empty  = sum(S .== 0 ) 
-    n_r = (n_empty/tg)^2
-    
-    
-    if (n_empty/tg) > 0.01
-        
-        dd = copy(S)
-        dd[dd .< 2] .= 0
-        connected_pops = β_b * dd
-
-            #Groups with 3 or more pigs can have emigration
-        mask_em =  (dd .> 0) #populations that will have emigration
-
-        em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
-
-        mask_im = (S .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
-
-        Births[mask_em] .*= n_r
-        Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
-    end 
-    out[1:11:end] .= Births
-    out[2:11:end] .= S.*μ_p.*(σ .+ (1-σ).*sqrt.(S./K))*g
-   
     nothing
 end
 
