@@ -40,22 +40,24 @@ function summary_stats_homogeneous(sol)
     disease = e_d + i_d + c_d #classes with disease
 
     max_d = findmax(disease) #max time
-
-    output[1] = max_d[2][1]
+    max_dt = max_d[2][1]
+    
+    output[1] = max_dt
     output[8] = max_d[1][1]
     if disease[end] >= 1 #more than 1 infected pig/ corpse    
         
         output[2] = 1
         output[6] = 0
-        if total_time - (max_d + t_end) < 365
+      
+        if total_time - (max_dt + t_end) < 365
             @warn "Endemic but peak in infections too close to end of simulation, increase time!"
             output[3] = -1
             output[4] = -1
             output[5] = -1
         else
-            output[3] = mean(e_d[max_d+t_end : end] + i_d[max_d+t_end : end])
-            output[4] = mean(c_d[max_d+t_end : end])
-            output[5] = mean(e_d[max_d+t_end : end] + i_d[max_d+t_end : end]+s_d[max_d+t_end : end] + r_d[max_d+t_end : end])
+            output[3] = mean(e_d[max_dt+t_end : end] + i_d[max_dt+t_end : end])
+            output[4] = mean(c_d[max_dt+t_end : end])
+            output[5] = mean(e_d[max_dt+t_end : end] + i_d[max_dt+t_end : end]+s_d[max_dt+t_end : end] + r_d[max_dt+t_end : end])
         end
     else 
         output[2] = 0
@@ -90,7 +92,10 @@ function summary_stats_heterogeneous(sol)
     data = reduce(vcat,transpose.(sol.u))
 
     if any(x->x <0, data)
-        println("Need to Reduce Timestep")
+        if sum(data .< 0) > 100
+            @warn "Reduce timestep"
+        end
+         
         data[data .< 0 ] .= 0
     end
     
@@ -115,23 +120,24 @@ function summary_stats_heterogeneous(sol)
     population_sum = disease_alive_sum + disease_free_sum;
    
     max_d = findmax(disease_sum) #max time
+    max_dt = max_d[2][1]
 
-    output[1] = max_d[2][1]
+    output[1] = max_dt
 
     if disease_sum[end] >= 1 #more than 1 infected pig/ corpse    
         
         output[2] = 1
         output[6] = 0
 
-        if total_time - (max_d + t_end) < 365
+        if total_time - (max_dt + t_end) < 365
             @warn "Endemic but peak in infections too close to end of simulation, increase time!"
             output[3] = -1
             output[4] = -1
             output[5] = -1
         else
-            output[3] = mean(disease_alive_sum[max_d+t_end : end])
-            output[4] = mean(disease_corpse_sum[max_d+t_end : end])
-            output[5] = mean(population_sum[max_d+t_end : end])
+            output[3] = mean(disease_alive_sum[max_dt+t_end : end])
+            output[4] = mean(disease_corpse_sum[max_dt+t_end : end])
+            output[5] = mean(population_sum[max_dt+t_end : end])
         end
     else 
         output[2] = 0

@@ -1,18 +1,24 @@
 module Run
 #module that runs the African swine fever models, a wrapper for all other modules
+using DifferentialEquations
+using LinearAlgebra
+using Distributions
+using SparseArrays
 
 include("Models.jl") #where all the models are!
 include("Input.jl") #the input
 include("Analyse.jl")
 
-function ASF(input_path, out)
+export ASF
+
+function ASF(input_path, out = "s")
     #wrapper function to run ASF models!
 
-    i1 = Input.Model_Data(input_path)
+    i1 = Input.Model_Data(input_path, verbose = true)
 
     n_sims  = i1.NR
     n_time  = i1.Time
-    n_group = i1.Populations.total
+    n_group = i1.Parameters.Populations.total
     MN = i1.MN
     if out == "f"
         @info "Full simulation output"
@@ -33,18 +39,19 @@ function ASF(input_path, out)
 
             params = convert_homogeneous(input.Parameters) #converting params to single array!
 
-            prob_ode = ODEProblem(Models.ASF_M1, Input.U0, Input.Time ,params) #setting up ode model
+            prob_ode = ODEProblem(Models.ASF_M1, input.U0, input.Time, params) #setting up ode model
             
             sol = solve(prob_ode, saveat = 1,reltol=1e-8) #running ode model!
-
+            
         else #running TAU model!
 
-            const nt = input.Parameters.Populations.cum_sum[end] #total number of groups and/or farms
-            const nc = 5 #number of classes (SEIRC)
-            const eqs = 11 #number of processes
+            nt = input.Parameters.Populations.cum_sum[end] #total number of groups and/or farms
+            
+            nc = 5 #number of classes (SEIRC)
+            eqs = 11 #number of processes
 
             #Matrix of all the transitions between classes for Gillespie model
-            const dc = sparse(zeros(nt*nc,nt*eqs))
+            dc = sparse(zeros(nt*nc,nt*eqs))
 
             dc[0*nc*nt+1:nc*nt*eqs+nc:end] .= 1
             dc[1*nc*nt+1:nc*nt*eqs+nc:end] .= -1
@@ -77,23 +84,28 @@ function ASF(input_path, out)
             if MN == 2 #M2!
 
                 params = convert_homogeneous(input.Parameters) #converting params to single array!
+               
                 rj = RegularJump(Models.ASF_M2, regular_c, eqs)
-                prob = DiscreteProblem(Input.U0,Input.Time, params)
+                prob = DiscreteProblem(input.U0,input.Time, params)
                 jump_prob = JumpProblem(prob,Direct(),rj)
                 sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
-
+                
             elseif (MN == 3) & (input.Parameters.Populations.pop == 1) #M3 with one pop!
-
+                
                 params = convert_heterogeneous(input.Parameters) #converting params to single array!
-                rj = RegularJump(Models.ASF_M3S, regular_c, eqs)
-                prob = DiscreteProblem(Input.U0,Input.Time, params)
+                
+                rj = RegularJump(Models.ASF_M3S, regular_c, eqs*nt)
+                U0 = convert(Vector{Int8}, input.U0)
+                prob = DiscreteProblem(U0,input.Time, params)#hetero_single_test(input.Parameters))
                 jump_prob = JumpProblem(prob,Direct(),rj)
                 sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
 
             else #M3 with multipopulations!
-
-                rj = RegularJump(Models.ASF_M3, regular_c, eqs)
-                prob = DiscreteProblem(Input.U0,Input.Time, Input.Parameters)
+            
+                rj = RegularJump(Models.ASF_M3, regular_c, eqs*nt)
+                U0 = convert(Vector{Int16}, input.U0)
+                
+                prob = DiscreteProblem(U0,input.Time, input.Parameters)
                 jump_prob = JumpProblem(prob,Direct(),rj)
                 sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
 
@@ -121,7 +133,7 @@ function ASF(input_path, out)
         end
 
     end
-
+    return output
 end
 
 
@@ -135,9 +147,9 @@ function convert_homogeneous(input)
     params[4]  = input.ζ[1]
     params[5]  = input.γ[1]
     params[6]  = input.ω[1]
-    parmsams[7] =input.ρ[1]
-    params[8] = input.λ[1]
-    params[9] = input.κ[1]
+    params[7]  = input.ρ[1]
+    params[8]  = input.λ[1]
+    params[9]  = input.κ[1]
     
     params[10] = input.σ[1]
     params[11] = input.θ[1]
@@ -158,11 +170,11 @@ end
 
 function convert_heterogeneous(input)
     #Function to convert input structure to simple array, only for single population M3 model!
-    params = Vector{Any}(undef,22)
-    
+    #params = Vector{Vector{Float32},Matrix{Float32}, Matrix{Int8}, Float32, Vector{UInt8}, Float32, Float32,Float32,Float32, Float32, Float32,Float32,Float32, Float32, Float32, Bool, Float32, Float32,Float32,Float32, Float32, Vector{Float32}}(undef,22)
+    params =  Vector{Any}(undef,26)
     beta = input.β
     beta_con = input.β_b
-
+    n_g = size(input.K)[1]
     params[1]  = beta[diagind(beta)]
     params[2]  = beta.*beta_con
     params[3]  = input.β_d
@@ -188,8 +200,13 @@ function convert_heterogeneous(input)
     params[20] = input.la[1]
     params[21] = input.lo[1]
     
-    params[22] = input.Populations.area[1]
+    params[22] = zeros(Float32,n_g)
+    params[23] = ones(UInt8,n_g,1)
+    params[24] = ones(UInt8,n_g,n_g)
+    params[25] = ones(UInt8,n_g,n_g)
+    params[26] = ones(UInt8,n_g,n_g)
 
+    
     return params
 end
 

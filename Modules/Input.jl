@@ -77,7 +77,9 @@ struct Meta_Data <: Data_Input
                 end
 
             end
-
+            
+            @info "$(Ne) Simulations"
+                
             if F
                 @info "Running with fitted parameters"
             end
@@ -172,14 +174,10 @@ struct Population_Data <: Data_Input
             if (Sf[1] > 25) | (Sf[1]<4)
                 @warn "Mean feral group size of $(Sf[1])"
             end
-
-            if Br[1] != 0.25
-                @warn "Boar to group ratio of $(Br[1])"
-            end 
-
-            if Ni[1] != 8
-                @warn "Mean feral connectivity of $(Ni[1])"
-            end 
+            
+            @info "Boar to group ratio of $(Br[1])"
+            @info "Mean feral connectivity of $(Ni[1])"
+            
 
             if (B[1] > 0.01) | (B[1] < 0.001)
                 @warn "Birth rate of $(B[1])"
@@ -303,7 +301,7 @@ struct Model_Data
     MN::Int8 #which model we are running with (1- ODE, 2-Tau Homogeneous, 3-Tau Heterogeneous)
     Time::Tuple{Float32, Float32} #Model run time
     NR::Int16 #number of runs in ensemble!
-    U0::Vector{Int16} #Initial Population
+    U0::Vector{Int32} #Initial Population
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
 
@@ -317,11 +315,11 @@ struct Model_Data
         network, counts = Network.build(sim, pops, fitting_rewire, verbose) 
         
         #Now using network to build init pops
-        S0 = Population.build_s(sim, pops, network, counts) #initial populations
+        S0 = Population.build_s(sim, pops, network, counts, verbose) #initial populations
      
         Parameters = Model_Parameters(sim, pops, sea, S0, counts, network)
     
-        U0 = Population.spinup_and_seed(sim,pops, S0,Parameters) #burn in pop to desired start day and seed desired ASF!
+        U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
       
         new(sim.Model,Time, sim.N_ensemble, U0, Parameters, pops)
         

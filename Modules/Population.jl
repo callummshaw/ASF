@@ -9,7 +9,7 @@ using SparseArrays
 export burn_population
 export build_s
 
-function spinup_and_seed(sim,pops, S0,Parameters)
+function spinup_and_seed(sim,pops, S0,Parameters,verbose)
     # wrapper function to burn in different populations to desired day, different methods for different models
     Mn = sim.Model
 
@@ -21,13 +21,13 @@ function spinup_and_seed(sim,pops, S0,Parameters)
     end
     
     #Seeding ASF in the population!
-    U1 = seed_ASF(sim,pops, Parameters, S1)
+    U1 = seed_ASF(sim,pops, Parameters, S1, verbose)
     
     return U1
 end
 
 
-function seed_ASF(sim,pops, Parameters, S1)
+function seed_ASF(sim,pops, Parameters, S1, verbose)
     #function to Seed ASF in population!
 
     Mn = sim.Model
@@ -43,12 +43,15 @@ function seed_ASF(sim,pops, Parameters, S1)
         p_e = data.N_e[1] #percentage of K that are exposed!
         p_i = data.N_i[1] #percentage of K that are infected!
         
+        
         if (p_e + p_i) > 1
-            @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
-            p_e = 0.01
-            p_i = 0.01
+            if verbose
+                @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
+            end
+                p_e = 0.01
+                p_i = 0.01
         end
-       
+        
         ne = K*p_e
         ni = K*p_i
         
@@ -87,13 +90,17 @@ function seed_ASF(sim,pops, Parameters, S1)
             p_i = data.N_i[1] #percentage of K that are infected!
             
             p_ei = p_e + p_i
-
+            
+            
             if p_ei > 1
-                @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
+                if verbose
+                    @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
+                end
                 p_e = 0.01
                 p_i = 0.01
                 p_ei = p_e + p_i 
             end
+            
             
             Tg = n_cs[i+1]-n_cs[i]
             u1 = zeros(Int32,5*Tg) #group pops for Population i
@@ -103,7 +110,11 @@ function seed_ASF(sim,pops, Parameters, S1)
             if i == n_inf #in seeded population!
                 
                 n_seed = trunc(Int16,Tg*(p_ei))  #number of groups we will seed ASF in!
-
+                
+                if verbose
+                    @info "Seeding ASF in $n_seed groups"
+                end
+                
                 rr = rand(n_cs[i]+1:n_cs[i+1]) #selecting 1 random group in population
                 
                 netw = Parameters.β_d[:,rr] #connected populations to randomly selected group
@@ -112,7 +123,7 @@ function seed_ASF(sim,pops, Parameters, S1)
                 asf_groups = zeros(Int16,0)
                 append!(asf_groups,rr)
                 
-                n_cons = length(asf_groups) #number of connections(populations we will seed in)
+                n_cons = length(cons) #number of connections(populations we will seed in)
                 
                 if n_cons == (n_seed -1) #there are exactly the right ammount of connections!
                 
@@ -154,12 +165,13 @@ function seed_ASF(sim,pops, Parameters, S1)
                     end 
                     
                 end 
-                
+               
+               
                 for j in asf_groups #now seeding in all the groups we want!
                     g_p = K[j] #group carrying capacity
                     init_pop = S1[j]
                     ra = j -1 #needed for indexing!
-                    
+                   
                     if g_p > 1 #sow population! (Asumming whole population infected or exposed!)
                         
                         e_pop = trunc(Int16, init_pop*p_e/p_ei)
@@ -188,7 +200,6 @@ function seed_ASF(sim,pops, Parameters, S1)
             U1[n_cs_class[i]+1:n_cs_class[i+1]] = u1
         end
             
-        
     end
 
     return U1
@@ -309,7 +320,7 @@ function birth_pulse_vector(t,k,s,p)
     return k*exp(-s*cos(pi*(t+p)/365)^2)
 end
 
-function build_s(sim, pops, network, counts)
+function build_s(sim, pops, network, counts, verbose)
     #=
     Function to build the initial S population (seed at a later date) 
     =#

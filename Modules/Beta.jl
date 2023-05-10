@@ -87,7 +87,7 @@ function construction(sim, pops, counts, network)
                 beta_inter = df_beta_inter[rand_values[2]][1]
 
                 beta_pop[beta_pop .== 100] .= beta_intra #intra feral
-                beta_pop[beta_pop .== 200] .= beta_inter #inter feral
+                beta_pop[beta_pop .== 200] .= beta_inter/6 #inter feral
                 beta_pop[beta_pop .== 300] .= data.B_fl[1] #farm feral not_fitted!
                 beta_pop[beta_pop .== 400] .= data.B_l[1] #intra farm not fitted!
             end
