@@ -1,5 +1,7 @@
+"Module to initialise population (spin up and seed ASF) for the three different models!"
+
 module Population
-# Module to initialise population (burn in and seed ASF) for the three different models!
+
 using Distributions
 using Random
 using DifferentialEquations

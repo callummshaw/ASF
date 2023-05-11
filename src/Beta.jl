@@ -1,5 +1,7 @@
+"Module that fills the transmission matrix from either fitted parameters of specified input"
+
 module Beta
-#module to build beta!
+
 using CSV
 using DataFrames
 

@@ -1,3 +1,4 @@
+"Module that builds the network used in the ASF model (M3 only)"
 module Network
 
 using Distributions

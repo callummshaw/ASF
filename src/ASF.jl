@@ -1,5 +1,6 @@
+"Wrapper module to run ASF modelling framework"
 module ASF
-#module that runs the African swine fever models, a wrapper for all other modules
+
 using DifferentialEquations
 using LinearAlgebra
 using Distributions
@@ -7,9 +8,15 @@ using SparseArrays
 
 include("Models.jl") #where all the models are!
 include("Input.jl") #the input
-include("Analyse.jl")
+include("Analyse.jl") #some simple analysis
 
 export Model
+
+"""
+	Model(input_path, out)
+
+Function that runs the ASF models, ``input_path`` is the location of input data, which are three csv files. ``Simulation_Data.csv`` contains model meta data, ``Population.csv`` contains data on the population being modelled, and ``Seasonal.csv`` contains information for seasonally varying parameters. Descriptions of each variable specified in the csv files are included in the sample input files provided. The secondinput ``out`` controls the model output type. By default it is set to return summary statstics of the runs, however if ``out = "f"`` full model simualtions on a daily time-step are returned. 
+"""
 
 function Model(input_path, out = "s")
     #wrapper function to run ASF models!

@@ -1,6 +1,5 @@
+"Module to analyse ASF model output and create relevant summary statistics"
 module Analysis
-
-#module that contains a few analysis functions for ASF Work!
 
 using Statistics
 

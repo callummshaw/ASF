@@ -1,3 +1,5 @@
+"Module that contains the three ASF models, ODE, homogeneous tau-leaping, and heterogeneous tau-leaping"
+
 module Models 
 
 using LinearAlgebra
@@ -411,93 +413,5 @@ function rebeta!(input)
     input.Parameters.β = beta
     
 end
-
-function ASF_M3SL(out,u,p,t)
-    #ASF model for a single population (can make some speed increases) without farms!
-
-    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, Seasonal, bw, bo, k, la, lo, Area = p 
-    ref_density = 1 #baseline density (from Baltics where modelled was fitted)
-    year = 365 #days in a year
-
-    u[u.<0] .= 0
-    S = Vector{UInt8}(u[1:5:end])
-    E = Vector{UInt8}(u[2:5:end])
-    I = Vector{UInt8}(u[3:5:end])
-    R = Vector{UInt8}(u[4:5:end])
-    C = Vector{UInt8}(u[5:5:end])
-
-    N = S .+ E .+ I .+ R .+ C
-    Np = S .+ E .+ I .+ R
-    
-    N[N .== 0] .= 1
-    
-    tg = length(Np) #total groups in all populations
-    tp = sum(Np) # total living pigs
-    NT  = sum(u) - sum(u[5:5:end])
-    KT = sum(K)
-    
-    beta_mod = sqrt(NT/KT)
-    Lam = 1/( λ + la * cos((t + lo) * 2*pi/year))
-    p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
-    
-    Births = p_mag.*(σ .* Np .+ ((1-σ)) .* sqrt.(abs.(Np .* K)))#total! (rate times NP)
-    Deaths = μ_p.*(σ .+ ((1-σ)).*sqrt.(abs.(Np./K)))*g #rate
-
-    #now stopping boar births
-    mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
-    boar_births = p_mag*sum(mask_boar)
-    Births[mask_boar] .= 0
-    mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive 
-    Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
-    
-    n_empty  = sum(Np .== 0 )   
-    
-    if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
-        
-        n_r = (n_empty/tg)^2
-        
-        dd = copy(Np)
-        dd[dd .< 2] .= 0
-        connected_pops = β_b * dd
-
-            #Groups with 3 or more pigs can have emigration
-        mask_em =  (dd .> 0) #populations that will have emigration
-
-        em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
-
-        mask_im = (Np .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
-
-        Births[mask_em] .*= n_r
-        Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
-
-    end
-    
-    out[1:11:end] .= Births
-    out[2:11:end] .= S.*Deaths
-    out[4:11:end] .= E.*Deaths
-    out[5:11:end] .= ζ .* E
-    out[6:11:end] .= ρ .* γ .* I 
-    out[7:11:end] .= I.*Deaths
-    out[8:11:end] .= γ .* (1 .- ρ) .* I
-    out[9:11:end] .= R.*Deaths
-    out[10:11:end].= Lam .* C
-    out[11:11:end] .= κ .* R 
-    
-    for i in 0:999
-        s = u[i*5+1]
-        e = u[i*5+2]
-        ii = u[i*5+3]
-        r = u[i*5+4]
-        c = u[i*5+5]
-        n = s+e+ii+r + c
-        Nn = N .+ n
-        beta = sum((beta_mod*s) .* β_o[:,i+1] .* (I .+ ω.*C) ./ Nn)
-       
-        out[i*11+3]  = 0#beta + β_i[i+1]*(s/n)*(ii + ω*c)
-        
-    end
-    nothing
-end
-
 
 end

@@ -1,3 +1,5 @@
+"Module that builds most of the ASF model input"
+
 module Input
 
 using LinearAlgebra
