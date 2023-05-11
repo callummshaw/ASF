@@ -1,0 +1,52 @@
+#File containing infomation on distributions for model params assumes gaussian distribution
+Name,Mean,STD
+#Density
+Density,1,0
+#Number of feral groups (For M1 and M2 N_pop = N_feral*5)
+N_feral,1000,0
+#Number of farms
+N_farm,0,0
+#Feral group size
+Feral_size,6,0
+#Farm size
+Farm_size,1000,100
+#Ratio of lone boars
+Boar,0.2,0
+#Number of interconnection for groups within population
+N_int,6,0
+#Exposed population size in seeded populations 
+Exp_p,0.0025,0
+#Infected population size in seeded populations
+Inf_p,0.0025,0
+#Natural Birth Rate (We assume at K that birth rate equals death rate)
+Birth_n,0.0036,0.0001
+#Percent of natural birth/death rates that are NOT dependent on population density
+Density_rate,0.75,0
+#Power of (K/N) or (N/K) used for density birth/death rates
+Density_power,0.5,0
+#Fitting param to stabalise stochastic carrying capacity
+G_fit,0.9418,0
+#Death Probability
+Death,0.95,0.01
+#Intra feral transmission (or regular transmission for M1 and M2)
+B_feral,0.666,0.02
+#Intra farm transmission
+B_farm,1,0
+#Inter feral transmission
+Inter_feral,0.0451,0.002
+#Farm - feral transmission
+Farm_Feral,0.01,0
+#Power for density transmission (0 is frequency based and 1 is pure density)
+Density_t,0.5,0
+#Corpse infection modifier
+Corpse,0.5,0
+#Latent Rate
+Latent,6,1
+#Recovery period (days)
+Recovery,8,1
+#Immunity waning rate
+Immunity,180,7
+#Corpse decay rate feral
+Decay_feral,60,0
+#Corpse decay rate farm
+Decay_farm,1,1

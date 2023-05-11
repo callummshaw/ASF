@@ -1,0 +1,30 @@
+#File for all population related parameters for simulation
+Name,Value
+#Which Model to use? 1-ODE 2-TauHomogeneous 3-TauHeterogeneous
+Model,3
+#Use fitted params
+Fitted,true
+#Number of years to simulate
+Years,5
+#Number of desired runs!
+N_ensemble,5
+#Param values from means or distribution
+Identical,true
+#Seasonal
+Seasonal,true
+#Number of Populations (model 3 only)
+N_Pop,1
+#Number of Populations seeded with asf (model 3 only)
+N_Inf,1
+#Number of groups in population seeded with asf 
+N_Seed,5
+#Connection Type- for 2+ groups can have automatic connections between populations- line (l), circular (c), total (t), or off (o) (model 3 only)
+C_Type,c
+#Connection Strength- for inbuilt sims, this is the connection strength between populations (model 3 only)
+C_Str,0.1
+#Network type: random(r), scale-free (s), or small-worlds (w) (model 3 only)
+Network,w
+#Degree of network (model 3 only)
+N_param,0.2
+#Starting Date (1-365,  where jan 1st = 1 etc.)
+S_Day,180
