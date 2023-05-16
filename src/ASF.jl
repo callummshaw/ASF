@@ -25,11 +25,12 @@ function Model(input_path,out)
 
     n_sims  = i1.NR
     n_time  = i1.Time
-    n_group = i1.Parameters.Populations.total
+    n_group = i1.Parameters.Populations.total[1]
+
     MN = i1.MN
     if out == "f"
         @info "Full simulation output"
-        output = zeros(n_sims,n_time,n_group*5) 
+        output = zeros(n_sims,round(Int,n_time[2]-n_time[1])+1,n_group*5) 
     else
         @info "Summary statistic output"
         if MN in [1,2]
@@ -40,6 +41,8 @@ function Model(input_path,out)
     end
 
     for i in 1:i1.NR
+        
+        
         input = Input.Model_Data(input_path); #all input data!
     
         if MN == 1 #running ODE model!
@@ -51,7 +54,9 @@ function Model(input_path,out)
             sol = solve(prob_ode, saveat = 1,reltol=1e-8) #running ode model!
             
         else #running TAU model!
-
+            if mod(i,50) == 0 
+                @info "$(i) sims of $(i1.NR)!"
+            end
             nt = input.Parameters.Populations.cum_sum[end] #total number of groups and/or farms
             
             nc = 5 #number of classes (SEIRC)
@@ -146,7 +151,7 @@ end
 
 function convert_homogeneous(input)
     #Function to convert input structure to simple array for M1 and M2
-    params = Vector{Any}(undef,19)
+    params = Vector{Any}(undef,18)
 
     params[1]  = input.β[1]
     params[2]  = input.μ_p[1]
@@ -160,14 +165,13 @@ function convert_homogeneous(input)
     
     params[10] = input.σ[1]
     params[11] = input.θ[1]
-    params[12] = input.η[1]
-    params[13] = input.Seasonal
-    params[14] = input.bw[1]
-    params[15] = input.bo[1]
-    params[16] = input.k[1]
-    params[17] = input.la[1]
-    params[18] = input.lo[1]
-    params[19] = input.Populations.area[1]
+    params[12] = input.Seasonal
+    params[13] = input.bw[1]
+    params[14] = input.bo[1]
+    params[15] = input.k[1]
+    params[16] = input.la[1]
+    params[17] = input.lo[1]
+    params[18] = input.Populations.area[1]
     
     return params
 end
@@ -176,8 +180,7 @@ end
 
 
 function convert_heterogeneous(input)
-    #Function to convert input structure to simple array, only for single population M3 model!
-    #params = Vector{Vector{Float32},Matrix{Float32}, Matrix{Int8}, Float32, Vector{UInt8}, Float32, Float32,Float32,Float32, Float32, Float32,Float32,Float32, Float32, Float32, Bool, Float32, Float32,Float32,Float32, Float32, Vector{Float32}}(undef,22)
+    
     params =  Vector{Any}(undef,26)
     beta = input.β
     beta_con = input.β_b
@@ -197,22 +200,22 @@ function convert_heterogeneous(input)
     
     params[12] = input.σ[1]
     params[13] = input.θ[1]
-    params[14] = input.η[1]
-    params[15] = input.g[1]
+    params[14] = input.g[1]
 
-    params[16] = input.Seasonal
-    params[17] = input.bw[1]
-    params[18] = input.bo[1]
-    params[19] = input.k[1]
-    params[20] = input.la[1]
-    params[21] = input.lo[1]
+    params[15] = input.Seasonal
+    params[16] = input.bw[1]
+    params[17] = input.bo[1]
+    params[18] = input.k[1]
+    params[19] = input.la[1]
+    params[20] = input.lo[1]
+    
+    params[21] = input.Populations.area[1]
     
     params[22] = zeros(Float32,n_g)
     params[23] = ones(UInt8,n_g,1)
     params[24] = ones(UInt8,n_g,n_g)
     params[25] = ones(UInt8,n_g,n_g)
     params[26] = ones(UInt8,n_g,n_g)
-
     
     return params
 end

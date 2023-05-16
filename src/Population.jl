@@ -42,8 +42,8 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
         
         U1 = zeros(n_classes)
 
-        p_e = data.N_e[1] #percentage of K that are exposed!
-        p_i = data.N_i[1] #percentage of K that are infected!
+        p_e = data.N_e[1]/100 #percentage of K that are exposed!
+        p_i = data.N_i[1]/100 #percentage of K that are infected!
         
         
         if (p_e + p_i) > 1
@@ -88,8 +88,8 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
 
         for (i, data) in enumerate(pops)
             
-            p_e = data.N_e[1] #percentage of K that are exposed!
-            p_i = data.N_i[1] #percentage of K that are infected!
+            p_e = data.N_e[1]/100 #percentage of K that are exposed!
+            p_i = data.N_i[1]/100 #percentage of K that are infected!
             
             p_ei = p_e + p_i
             

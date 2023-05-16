@@ -25,11 +25,9 @@ function construction(sim, pops, counts, network)
         for i in 1:n_pops #iterating through
 
             data = pops[i]
-
-            n_aim = data.N_int[1]
-
+            
             connected_pops[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] *= i
-
+        
 
             beta_pop = beta[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]]
             
@@ -38,7 +36,7 @@ function construction(sim, pops, counts, network)
                 if sim.Identical #no variation, just mean of dist
 
                     beta_pop[beta_pop .== 100] .= data.B_f[1] #intra feral
-                    beta_pop[beta_pop .== 200] .= data.B_ff[1] .* (1/n_aim) #inter feral
+                    beta_pop[beta_pop .== 200] .= data.B_ff[1] #inter feral
                     beta_pop[beta_pop .== 300] .= data.B_fl[1] #farm feral
                     beta_pop[beta_pop .== 400] .= data.B_l[1] #intra farm
                 else #from dist
@@ -69,15 +67,17 @@ function construction(sim, pops, counts, network)
                         beta_pop[beta_pop .== 400] = b_farm
 
                     end
+                    
+                    beta_pop = beta_pop
 
                 end
             else #running M3 from fitted values!
                 if sim.Network == "s"
-                    path = "../Inputs/Fitted_Params/Tau-Hetrogeneous/Scale_Free/"
+                    path = "Inputs/Fitted_Params/Tau-Hetrogeneous/Scale_Free/"
                 elseif sim.Network == "w"
-                    path = "../Inputs/Fitted_Params/Tau-Hetrogeneous/Small_Worlds/"
+                    path = "Inputs/Fitted_Params/Tau-Hetrogeneous/Small_Worlds/"
                 else 
-                    path = "../Inputs/Fitted_Params/Tau-Hetrogeneous/Random/"
+                    path = "Inputs/Fitted_Params/Tau-Hetrogeneous/Random/"
                 end
 
                 rand_values = rand(1:10000,2)
@@ -109,7 +109,7 @@ function construction(sim, pops, counts, network)
                 beta[1] = rand(i_f, 1)
             end
         else #running M3 from fitted values!
-            path = "../Inputs/Fitted_Params/Tau-Homogeneous/contact_out.csv"
+            path = "Inputs/Fitted_Params/Tau-Homogeneous/contact_out.csv"
             rand_values = rand(1:10000,1)
 
             df_beta = Array(CSV.read(path, DataFrame, header=false))
@@ -129,7 +129,7 @@ function construction(sim, pops, counts, network)
                 beta[1] = rand(i_f, 1)
             end
         else #running M3 from fitted values!
-            path = "../Inputs/Fitted_Params/ODE/contact_out.csv"
+            path = "Inputs/Fitted_Params/ODE/contact_out.csv"
             rand_values = rand(1:10000,1)
 
             df_beta = Array(CSV.read(path, DataFrame, header=false))

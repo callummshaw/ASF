@@ -1,11 +1,11 @@
 #File containing infomation on distributions for model params assumes gaussian distribution
 Name,Mean,STD
 #Density
-Density,1.65,0
+Density,3.1,0
 #Number of feral groups (will default to 1 while running model for M1 and M2, but will be used to generate population)
 N_feral,1000,0
 #Feral group size
-Feral_size,4.2,0
+Feral_size,10,0
 #Ratio of lone boars
 Boar,0.2,0
 #Number of interconnection for groups within population
@@ -15,11 +15,11 @@ Exp_p,0.25,0
 #Infected population proportion in seeded populations (%)
 Inf_p,0.25,0
 #Litters per year
-Litter_n,0.84,0
+Litter_n,1.64,0
 #Litter Size
-Litter_s,6.6,0
+Litter_s,6.4,0
 #First year mortality rate
-Litter_mu,0.85,0
+Litter_mu,0.51,0
 #Percent of natural birth/death rates that are NOT dependent on population density
 Density_rate,0.75,0
 #Power of (K/N) or (N/K) used for density birth/death rates

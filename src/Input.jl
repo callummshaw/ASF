@@ -111,78 +111,102 @@ struct Population_Data <: Data_Input
     =#
 
     Dense::Vector{Float64} #density of population
-    N_feral::Vector{UInt16} #number of feral groups
-    N_farm::Vector{UInt8} #number of farm groups
+    N_feral::Vector{UInt16} #number of feral groups 
     N_f::Vector{Float64} #feral group size
-    N_l::Vector{Float64} #farm population size
     Boar_p::Vector{Float64} #Proportion of groups that are wild boars
     N_int::Vector{UInt8} #average interconnection between feral groups
     N_e::Vector{Float64} #% of population seeded in exposed
     N_i::Vector{Float64} #% of population seeded in infected
-    Birth::Vector{Float64} #natural birth rate, at K births equal deaths
+    
+    Litter_n::Vector{Float64} #number of litters per year
+    Litter_s::Vector{Float64} #litter size
+    Litter_mu::Vector{Float64} #first year mortality rate
+   
     Density_rate::Vector{Float32} #percent of natural birth/deaths that are NOT related to population density (0-1)
     Density_power::Vector{Float32} #power of K/N or N/K use for density birth/death rates
     g_fit::Vector{Float32} #fitting param to ensure stable birth/death rate
-    Death::Vector{Float64} #ASF death prob
+   
     B_f::Vector{Float64} #intra feral group transmission
-    B_l::Vector{Float64} #intra farm transmission
     B_ff::Vector{Float64} #inter feral group transmission
-    B_fl::Vector{Float64} #farm-feral transmission
-    B_Density::Vector{Float64} #density dependence of beta (0 for frequncy, 1 for density)
     Corpse::Vector{Float64} #corpse infection modifier
+    
+    Death::Vector{Float64} #ASF death prob
     Latent::Vector{Float64} #latent period
     Recovery::Vector{Float64}#Recovery rate
     Immunity::Vector{Float64} #immunity
     Decay_f::Vector{Float64} #decay feral
+   
+    #farm
+    N_farm::Vector{UInt8} #number of farm groups
+    N_l::Vector{Float64} #farm population size
+    B_l::Vector{Float64} #intra farm transmission
+    B_fl::Vector{Float64} #farm-feral transmission
     Decay_l::Vector{Float64} #decay farm
     
-    function Population_Data(input, verbose)
-        Den = [input.Mean[1],input.STD[1]] 
-        Nf = [input.Mean[2],input.STD[2]]
-        Nl = [input.Mean[3],input.STD[3]]
-        Sf = [input.Mean[4],input.STD[4]]
-        Sl = [input.Mean[5],input.STD[5]]
-        Br = [input.Mean[6],input.STD[6]]
-        Ni = [input.Mean[7],input.STD[7]]
-        Npe = [input.Mean[8],input.STD[8]]
-        Npi = [input.Mean[9],input.STD[9]]
-        B = [input.Mean[10],input.STD[10]]
-        Dr = [input.Mean[11],input.STD[11]]
-        Dp = [input.Mean[12],input.STD[12]]
-        Gf = [input.Mean[13],input.STD[13]]
-        D = [input.Mean[14],input.STD[14]]
-        Bf = [input.Mean[15],input.STD[15]]
-        Bl = [input.Mean[16],input.STD[16]]
-        Bff = [input.Mean[17],input.STD[17]]
-        Bfl = [input.Mean[18],input.STD[18]]
-        Bd = [input.Mean[19],input.STD[19]]
-        C = [input.Mean[20],input.STD[20]]
-        L = day_to_rate(input.Mean[21],input.STD[21])
-        R = day_to_rate(input.Mean[22],input.STD[22])
-        Im = day_to_rate(input.Mean[23],input.STD[23])
-        Df = [input.Mean[24],input.STD[24]]
-        Dl = [input.Mean[25],input.STD[25]]
+    function Population_Data(input, sim, verbose)
         
-        #Here just checking the inputs to make sure they are reasonable/expected
+        #Feral/General Params
+        
+        Den = [input.Mean[1],input.STD[1]] #density
+        Nf = [input.Mean[2],input.STD[2]] #number feral
+        Sf = [input.Mean[3],input.STD[3]] #feral group size
+        Br = [input.Mean[4],input.STD[4]] #boar percentage
+        Ni = [input.Mean[5],input.STD[5]] #inter feral conectivity
+        N_e = [input.Mean[6],input.STD[6]] #percentage of pop exposed
+        N_i = [input.Mean[7],input.STD[7]] #percentage of pop infected
+        
+        LN = [input.Mean[8],input.STD[8]] #number of litters
+        LS = [input.Mean[9],input.STD[9]] #litter size
+        LM = [input.Mean[10],input.STD[10]] #first year mortality
+        
+        Dr = [input.Mean[11],input.STD[11]] #density rate
+        Dp = [input.Mean[12],input.STD[12]] #density power
+        Gf = [input.Mean[13],input.STD[13]] #param to stop pop drift
+        
+       
+        #fitted params, will run off these values if not fitted!
+        Bf = [input.Mean[14],input.STD[14]] #intra feral
+        Bff = [input.Mean[15],input.STD[15]] #inter feral
+        C = [input.Mean[16],input.STD[16]] #corpse infection modifier
+        
+        D = [input.Mean[17],input.STD[17]] #death prob once infected 
+        
+        L = day_to_rate(input.Mean[18],input.STD[18]) #latent rate
+        R = day_to_rate(input.Mean[19],input.STD[19]) #recovery rate
+        Im = day_to_rate(input.Mean[20],input.STD[20]) #immunity rate
+        Df = [input.Mean[21],input.STD[21]] #corpse decay period
+        
+        #Farm Params
+        
+        Nl = [input.Mean[22],input.STD[22]] #number of farms in pop
+        Sl = [input.Mean[23],input.STD[23]] #farm size
+        Bl = [input.Mean[24],input.STD[24]]
+        Bfl = [input.Mean[25],input.STD[25]]
+        Dl = [input.Mean[26],input.STD[26]]
+                    
+        #Checking the inputs to make sure they are reasonable/expected
         if verbose 
             if Den[1] > 10
                 @warn "High starting density of $(Den[1])"
             end
-
-            if (Nf[1] > 1000) | (Nf[1] < 100)
-                @warn "$(Nf[1]) feral groups"
+            if Sim.Model == 3
+                @info "Boar to group ratio of $(Br[1])"
+                @info "Mean feral connectivity of $(Ni[1])"
+                if (Nf[1] > 1000) | (Nf[1] < 100)
+                    @warn "$(Nf[1]) feral groups"
+                end
+            else 
+                
             end 
-
+            
             if (Sf[1] > 25) | (Sf[1]<4)
                 @warn "Mean feral group size of $(Sf[1])"
             end
             
-            @info "Boar to group ratio of $(Br[1])"
-            @info "Mean feral connectivity of $(Ni[1])"
+            mean_births = LN[1]*LS[1]*(1-LM[1])
             
-
-            if (B[1] > 0.01) | (B[1] < 0.001)
-                @warn "Birth rate of $(B[1])"
+            if (mean_births > 0.01) | mean_births < 0.001)
+                @warn "Birth rate of $(mean_births)"
             end  
 
             if (Dr[1] > 1 ) | (Dr[1] < 0)
@@ -207,8 +231,7 @@ struct Population_Data <: Data_Input
 
         end
      
-        new(Den, Nf, Nl, Sf, Sl, Br, Ni, Npe, Npi, B, Dr, Dp, Gf, D, Bf, Bl, Bff, Bfl, Bd, C, L, R, Im, Df, Dl)
-
+        new(Den, Nf Sf, Br, Ni, Npe, Npi, LN, LS, LM, Dr, Dp, Gf, Bf, Bff, C, D, L, R, Im, Df, Nl, Sl, Bl, Bfl, Dl)
     end
     
 end
@@ -273,7 +296,6 @@ mutable struct Model_Parameters
     
     σ::Vector{Float32} #density split
     θ::Vector{Float32} #density power for births/deaths
-    η::Vector{Float32} #ensity power for transmission
     g::Vector{Float32} #fitting param for stable populations
 
     Seasonal::Bool #if we are running with seasonality
@@ -289,9 +311,9 @@ mutable struct Model_Parameters
     function Model_Parameters(sim, pops, sea, U0, Populations, network)
         
         β, connected_pops, connected_births = Beta.construction(sim, pops, Populations, network)
-        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations)
+        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations)
         
-        new(β, connected_births, connected_pops, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
+        new(β, connected_births, connected_pops, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
     end
     
 end
@@ -359,7 +381,6 @@ function parameter_build(sim, pops, sea, init_pops, counts)
 
     σ = Vector{Float32}(undef, n_pops) #density to non-density split for births and deaths
     θ = Vector{Float32}(undef, n_pops) #power of density effects for births/deaths 
-    η = Vector{Float32}(undef, n_pops) #power of density effects for transmission
     g = Vector{Float32}(undef, n_pops) #factor to allow for stable K with stochastic effects
 
     bw = Vector{Float32}(undef, n_pops)
@@ -387,7 +408,6 @@ function parameter_build(sim, pops, sea, init_pops, counts)
         
         σ[i] = data.Density_rate[1]
         θ[i] = data.Density_power[1]
-        η[i] = data.B_Density[1]
         g[i] = data.g_fit[1]
 
 
@@ -395,31 +415,38 @@ function parameter_build(sim, pops, sea, init_pops, counts)
 
             ζ[cs[i]+1:cs[i+1]] .= data.Latent[1]
             γ[cs[i]+1:cs[i+1]] .= data.Recovery[1]
-            μ_p[cs[i]+1:cs[i+1]] .= data.Birth[1]
             ρ[cs[i]+1:cs[i+1]] .= data.Death[1]
             κ[cs[i]+1:cs[i+1]] .= data.Immunity[1]
             λ[cs[i]+1:cs[i]+nf] .= data.Decay_f[1]
             λ[cs[i]+nf+1:cs[i+1]] .= data.Decay_l[1]
+            
+            birth_rate = data.LN[1]*data.LS[1]*data.LM[1]
+            μ_p[cs[i]+1:cs[i+1]] .= birth_rate
 
         else #running of distros
             
             ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 5) #latent dist
             γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 5) #r/d rate dist
-            μ_p_d = TruncatedNormal(data.Birth[1], data.Birth[2], 0, 1) #birth dist
             ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
             λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 1) #corpse decay feral dist
             λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2], 0, 5) #corpse decay farm dist
             κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 1)
-
+            
+            LN_d = TruncatedNormal(data.LN[1], data.LN[2], 0, 5) #number of yearly litters
+            LS_d = TruncatedNormal(data.LS[1], data.LS[2], 1, 20) #litter size
+            LM_d = TruncatedNormal(data.LM[1], data.LM[2], 1, 20) #litter mortality rate
+            
             ζ[cs[i]+1:cs[i+1]] = rand(ζ_d,nt)
             γ[cs[i]+1:cs[i+1]] = rand(γ_d,nt)
             ω[cs[i]+1:cs[i+1]] = rand(ω_d,nt)
             ρ[cs[i]+1:cs[i+1]] = rand(ρ_d,nt)
             κ[cs[i]+1:cs[i+1]] = rand(κ_d,nt)
-            μ_p[cs[i]+1:cs[i+1]] =  rand(μ_p_d,nt) 
             λ[cs[i]+1:cs[i]+nf] .= rand(λ_fd,nf)
             λ[cs[i]+nf+1:cs[i+1]] .= rand(λ_ld,nl)
 
+            
+            μ_p[cs[i]+1:cs[i+1]] =  rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) 
+            
         end
 
 
@@ -433,16 +460,16 @@ function parameter_build(sim, pops, sea, init_pops, counts)
         else #running off fitted!
             if sim.Model == 3
                 if sim.Network == "s"
-                    path = "../Inputs/Fitted_Params/Tau-Hetrogeneous/Scale_Free/omega.csv"
+                    path = "Inputs/Fitted_Params/Tau-Hetrogeneous/Scale_Free/omega.csv"
                 elseif sim.Network == "w"
-                    path = "../Inputs/Fitted_Params/Tau-Hetrogeneous/Small_Worlds/omega.csv"
+                    path = "Inputs/Fitted_Params/Tau-Hetrogeneous/Small_Worlds/omega.csv"
                 else 
-                    path = "../Inputs/Fitted_Params/Tau-Hetrogeneous/Random/omega.csv"
+                    path = "Inputs/Fitted_Params/Tau-Hetrogeneous/Random/omega.csv"
                 end
             elseif sim.Model == 2
-                path = "../Inputs/Fitted_Params/Tau-Homogeneous/omega.csv"
+                path = "Inputs/Fitted_Params/Tau-Homogeneous/omega.csv"
             else #ODE
-                path = "../Inputs/Fitted_Params/ODE/omega.csv"
+                path = "Inputs/Fitted_Params/ODE/omega.csv"
             end 
 
             rand_values = rand(1:10000,1)
@@ -472,7 +499,7 @@ function parameter_build(sim, pops, sea, init_pops, counts)
         
     end
 
-    return  μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, η, g, bw, bo, k, la, lo
+    return  μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo
     
 end
 
@@ -500,7 +527,7 @@ function read_inputs(path, verbose)
     
     for i in 1:Sim.N_Pop
         pop_data = CSV.read("$(path)/Population/Population_$(i).csv", DataFrame; comment="#") 
-        Pops[i] = Population_Data(pop_data, verbose)
+        Pops[i] = Population_Data(pop_data, Sim, verbose)
 
         if Sim.Seasonal
             seasonal_data = CSV.read("$(path)/Seasonal/Seasonal_$(i).csv", DataFrame; comment="#")
