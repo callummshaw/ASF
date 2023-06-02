@@ -15,111 +15,6 @@ export ASF_M1
 BLAS.set_num_threads(8)
 using Octavian 
 
-function ASF_M3(out,u,p,t)
-
-    ref_density = 1 #baseline density (from Baltics where modelled was fitted)
-    offset = 180 #seeding in the summer!
-    year = 365 #days in a year
-
-    u[u.<0] .= 0
-    
-    S = Vector{UInt8}(u[1:5:end])
-    E = Vector{UInt8}(u[2:5:end])
-    I = Vector{UInt8}(u[3:5:end])
-    R = Vector{UInt8}(u[4:5:end])
-    C = Vector{UInt8}(u[5:5:end])
-    
-    
-    S = @view u[1:5:end]
-    E = @view u[2:5:end]
-    I = @view u[3:5:end]
-    R = @view u[4:5:end]
-    C = @view u[5:5:end]
-
-    N = S .+ E .+ I .+ R .+ C
-    Np = S .+ E .+ I .+ R
-    
-    N[N .== 0] .= 1
-    
-    Pops = p.Populations 
-    
-    tp = Pops.cum_sum[end] #total groups in all populations
-
-    beta = copy(p.β)
-    Births = copy(p.μ_p)
-    Deaths = copy(p.μ_p)
-    Lambda = copy(p.λ)
-    connected_pops = p.β_b * Np
-
-    for i in 1:Pops.pop #going through populations
-    
-        nf = Pops.feral[i] #number of feral groups in region
-        ncs = Pops.cum_sum[i] #cumsum of farm and ferals over all regions
-        N_feral = sum(Np[ncs+1:ncs+nf]) #total feral population in region i
-        Density = N_feral/Pops.area[i]
-
-        beta[p.β_d .== i] .*= ((Density/ref_density).^(p.η))
-        Deaths[ncs+1:ncs+nf] *= (p.σ[i] .+ (1-p.σ[i]).*Np[ncs+1:ncs+nf].^p.θ[i].*p.K[ncs+1:ncs+nf].^(-p.θ[i]))
-        
-        if p.Seasonal
-
-            p_mag = birth_pulse(t, p,i)
-            Births[ncs+1:ncs+nf] = p_mag.*(p.σ[i] .* Np[ncs+1:ncs+nf] .+ (1-p.σ[i]).*Np[ncs+1:ncs+nf].^(1-p.θ[i]).*p.K[ncs+1:ncs+nf].^p.θ[i])
-            Lambda[ncs+1:ncs+nf] .+= p.la[i] * cos((t + offset + p.lo[i]) * 2*pi/year)
-        
-            #now stopping boar births
-            mask_boar = (p.K[ncs+1:ncs+nf] .== 1) .& (Np[ncs+1:ncs+nf] .> 0)
-            boar_births = sum(mask_boar)
-            Births[mask_boar] .= 0
-            mask_p_s = (Np[ncs+1:ncs+nf] .> 1) .& (p.K[ncs+1:ncs+nf] .> 1)
-            Births[mask_p_s] .+= p_mag*boar_births ./ sum(mask_p_s) 
-
-            if  p_mag > mean(p.μ_p[ncs+1:ncs+nf])
-                mask_em =  (Np[ncs+1:ncs+nf] .> 3) .& (p.K[ncs+1:ncs+nf] .> 1)
-                mask_im = (Np[ncs+1:ncs+nf] .== 0) .& (connected_pops[ncs+1:ncs+nf] .> 3) #population zero but connected groups have 3 or more pigs
-                extra_b = sum(Births[mask_im] .= 3*p_mag)
-                Births[mask_em] .-= extra_b ./ sum(mask_p_s)
-            end
-        else
-            Births[ncs+1:ncs+nf] *= (p.σ[i] .* Np[ncs+1:ncs+nf] .+ (1-p.σ[i]).*Np.^(1-p.θ[i]).*K[ncs+1:ncs+nf].^p.θ[i])
-
-            mask_boar = (p.K[ncs+1:ncs+nf] .== 1) .& (Np[ncs+1:ncs+nf] .> 0)
-            boar_births = sum(mask_boar)
-            Births[mask_boar] .= 0
-            mask_p_s = (Np[ncs+1:ncs+nf] .> 1) .& (p.K[ncs+1:ncs+nf] .> 1)
-            Births[mask_p_s] .+= μ_p*boar_births ./ sum(mask_p_s) 
-
-            #Immigration births (only happens around pulse time with the influx of births)
-            
-            mask_em =  (Np[ncs+1:ncs+nf] .> 3) .& (p.K[ncs+1:ncs+nf] .> 1)
-            mask_im = (Np[ncs+1:ncs+nf] .== 0) .& (connected_pops[ncs+1:ncs+nf] .> 3)
-            extra_b = sum(Births[mask_im] .= 3*μ_p)
-            Births[mask_em] .-= extra_b ./ sum(mask_p_s)
-            
-        end
-
-    end
-
-    v = ones(Int8,tp)
-    
-    populations  = v*N'+ N*v'
-   
-    populations[diagind(populations)] = N
-    
-    out[1:11:end] .= Births
-    out[2:11:end] .= S.*Deaths
-    out[3:11:end] .= ((beta .* S) ./ populations) * (I + p.ω .* C)
-    out[4:11:end] .= E.*Deaths
-    out[5:11:end] .= p.ζ .* E
-    out[6:11:end] .= p.ρ .* p.γ .* I 
-    out[7:11:end] .= I.*Deaths
-    out[8:11:end] .= p.γ .* (1 .- p.ρ) .* I
-    out[9:11:end] .= R.*Deaths
-    out[10:11:end].= (1 ./ Lambda) .* C
-    out[11:11:end] .= p.κ .* R 
-    
-    nothing
-end
 
 function ASF_M3S(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
@@ -207,7 +102,7 @@ function ASF_M2(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
     β, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, Seasonal, bw, bo, k, la, lo, Area = p 
-    
+
     ref_density = 2.8
     
     u[u.<0] .= 0

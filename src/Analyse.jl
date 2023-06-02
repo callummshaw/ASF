@@ -5,8 +5,9 @@ using Statistics
 
 export summary_stats_homogeneous
 export summary_stats_heterogeneous
+export summary_stats_endemic
 
-function summary_stats_homogeneous(sol)
+function summary_stats_homogeneous(sol,verbose)
     #=
     1. Peak time (time of infection peak)
     2. Endemic (1 for endemic, 0 for dieout)
@@ -49,7 +50,9 @@ function summary_stats_homogeneous(sol)
         output[6] = 0
       
         if total_time - (max_dt + t_end) < 365
+            if verbose
             @warn "Endemic but peak in infections too close to end of simulation, increase time!"
+            end
             output[3] = -1
             output[4] = -1
             output[5] = -1
@@ -72,7 +75,33 @@ function summary_stats_homogeneous(sol)
     return output
 end
 
-function summary_stats_heterogeneous(sol)
+function summary_stats_endemic(sol)
+    
+
+    data = reduce(vcat,transpose.(sol.u))
+
+    
+    s_d = data[:,1]
+    e_d = data[:,2]
+    i_d = data[:,3]
+    r_d = data[:,4]
+    c_d = data[:,5]
+
+   
+    disease = e_d + i_d + c_d #classes with disease
+
+    if disease[end] >= 1 #more than 1 infected pig/ corpse    
+        
+        output = 9999
+    else
+        output = findfirst(disease .< 1)[1] #non endemic!
+    end
+    
+
+    return output
+end
+
+function summary_stats_heterogeneous(sol,verbose)
     #=
     1. Peak time (time of infection peak)
     2. Endemic (1 for endemic, 0 for dieout)
@@ -129,7 +158,9 @@ function summary_stats_heterogeneous(sol)
         output[6] = 0
 
         if total_time - (max_dt + t_end) < 365
+            if verbose
             @warn "Endemic but peak in infections too close to end of simulation, increase time!"
+            end
             output[3] = -1
             output[4] = -1
             output[5] = -1

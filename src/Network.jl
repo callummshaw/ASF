@@ -13,10 +13,10 @@ mutable struct Network_Data
     #=
     Structure to store key data on each population, internal just to keep track of a few params
     =#
-    feral::Vector{Int16}
-    farm::Vector{Int8}
-    pop::Int8
-    total::Vector{Int16}
+    feral::Vector{Int16} #number of feral in each pop
+    farm::Vector{Int8} #number of farms in each pop
+    pop::Int8 #numbr of populations!
+    total::Vector{Int16} #the total populations in said region
     cum_sum::Vector{Int16}
     
     inf::Int8
@@ -28,30 +28,31 @@ mutable struct Network_Data
         n = size(feral)[1]
         t = feral + farm
         cs = pushfirst!(cumsum(t),0)
-        
-
         new(feral,farm,n,t,cs, inf, density, area)
     end
 end 
 
 
 
-function build(sim, pops, cn, verbose)
+function build(sim, pops, verbose, pop_net)
 
     #This function builds the network! (trivial for M1 and M2)
-
-    n_pops = sim.N_Pop #number of populations
+    n_p = sim.N_pop # number of populations per region
+    n_r = size(pops)[1] #number of regions
+    n_pops = n_p*n_r #total number of populations
     network = Vector{Matrix{Int16}}(undef, n_pops) #vector to store all the 
     feral_pops = Vector{Int16}(undef, n_pops)
     farm_pops = Vector{Int16}(undef, n_pops)
 
     if sim.Model == 3 #model 3 so need to generate network!
-        for pop in 1:n_pops 
-        
+        for pop in 1:n_pops #looping through all N populations
+            
+            data_i = (pop-1) ÷ n_p + 1 #get correct index for population
+
             feral_max = 5000 #maximum number of feral groups, will run very slow near maximum
             farm_max = 100 #maximum number of farm
 
-            data = pops[pop]
+            data = pops[data_i]
 
             #Feral dist
             if data.N_feral[1] == 0
@@ -101,17 +102,6 @@ function build(sim, pops, cn, verbose)
                 
                 if verbose & isodd(n_aim)
                     @warn "Odd group degree detected, Scale free and small worlds require even degree"
-                end
-                
-                if cn != 0 
-                    @warn "Custom rewiring probability being used!"
-                    
-                    if (cn > 1) | (cn < 0 )
-                        @warn "Rewiring must be between 0 and 1"
-                    end
-                    rewire  = cn
-                else
-                    rewire = sim.N_param
                 end
                 
                 feral = watts_strogatz(nf, n_aim, sim.N_param)
@@ -165,149 +155,121 @@ function build(sim, pops, cn, verbose)
 
     counts = Network_Data(feral_pops,farm_pops, sim.N_Inf,[0.0],[0.0])
     
-    if (n_pops > 1) & (sim.Model == 3)
-        combined_network = combine_networks(network,sim,counts)
+    if (n_pops > 1) & (sim.Model == 3) #model 3 with more than 1 population!
+        combined_network = combine_networks(network,sim,counts,pop_net)
     else
-        combined_network = network[1]
+        combined_network = network[1] #no need to combine!
     end
     
     return combined_network, counts
 
 end
 
-function combine_networks(network,sim, counts)
+function combine_networks(network,sim, counts, pop_net)
     #we have generated all the networks, but they need to be combined!
-    connections = population_connection(counts,sim) #calls to find connections
 
+    N_connections = sim.N_Con #number of connecting groups between populations
     n_pops = counts.pop
     n_cs = counts.cum_sum
     N = n_cs[end]
 
     meta_network = zeros(N,N)
   
-    links = []
-    
+    #combine all networks into one large "meta" network, note still no links between individual networks.
     for i in 1:n_pops #looping through populations
+        meta_network[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] = network[i] # the  network
+    end
 
-        meta_network[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] = network[i]
+    #now we need to connect all the networks with each other!
+    pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(pop_net))) #matrix of our meta-population network
+    
+    if size(pop_matrix)[1] != n_pops
+        @warn "Population level network and number of populations generated from input do not match, defaulting to line!"
+        pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(path_graph(n_pops))))
+    end
+    
+    connections = findall(>(0),pop_matrix) #vector with all our connections
+    
+    all_nodes = zeros(Int16,0) 
+
+    for i in connections
+        p1 = i[1]
+        p2 = i[2]
+
+        p1_base = n_cs[p1]
+        p2_base = n_cs[p2]
+
+        N1_nodes = find_nodes(network[p1], N_connections, all_nodes, p1_base) #nodes from pop 1 
+        N2_nodes = find_nodes(network[p2], N_connections, all_nodes, p2_base) #nodes from pop 2
         
-        for j in connections[i]
-            
-            new_link = sort([i,j]) #checking if we have already linked the two populations
+        append!(all_nodes,N1_nodes)
+        append!(all_nodes,N2_nodes)
 
-            if new_link ∉ links
-                push!(links, sort([i,j])) #storing the link
-                
-                if sim.C_Type == "o" #custom strengths
-                    println("-------------------------------------")
-                    println("Strength of Population  $(i) to Population  $(j) Transmission:")
-                    str = readline()
-                    str = parse(Float32, str)
-                else #pre-determined strength
-                    str = sim.C_Str
-                end
-                #the chosen population
-                ll = n_cs[i] + 1
-                ul = n_cs[i] + counts.feral[i]
-                l_group = rand(ll:ul)
+        for (j,v1) in enumerate(N1_nodes)
+            v2 = N2_nodes[j]
 
-                #populations the chosen population is linked too
-                ll_s = n_cs[j] + 1
-                ul_s = n_cs[j] + counts.feral[j]
-
-                s_group = rand(ll_s:ul_s)
-
-                meta_network[l_group,s_group] = str
-                meta_network[s_group,l_group] = str
-                
-            end
+            meta_network[v1,v2] = 200
+            meta_network[v2,v1] = 200
 
         end
-    end
+    end 
 
     return meta_network
 
 end
 
-function population_connection(counts, sim)
-    #=
-     Function to build the the connections between the populations
-     Could put in some error checking to make sure the entered populations are reasonable
-     
-     Inputs:
-     - counts, vector of the amount of farms and feral groups in each population
-     - sim, overall params will use to see if we need custom connections or not
-     Outputs:
-     -connections, vector of vectors containing the populations each population is connected too
-     =#
-
-    if (sim.C_Type == "o") & (counts.pop > 2) #custom input
-
-        println("-------------------------------------")
-        println("$(counts.pop) Populations!\nEnter connections for each population\n(for multiple seperate with space)")
-        println("-------------------------------------")
-            
-        connections = Vector{Vector{Int}}(undef, counts.pop)
-
-        for i in 1:counts.pop
-            println("Population $(i) Connects to:")
-            nums = readline()
-            numv =  parse.(Int, split(nums, " "))
-            connections[i] = numv
-        end
-    else #will have pre_loaded connections
-        connections  = premade_connections(sim.C_Type, counts.pop)
-    end    
-    
-    return connections
-end
-
-function premade_connections(type_c, Ni)
-    
-    #three different connection types, c-circular, l-line, t-total, will defualt to line 
-    connections = Vector{Vector{Int}}(undef, Ni)
-    
-    if Ni == 2 #if only 2 populations have to be connected
+function find_nodes(Network, N_connections, all_nodes, base)
         
-        connections[1] = [2]
-        connections[2] = [1]
-        
-    elseif type_c == "c" #circular connection
-        
-        for i in 1:Ni
-            
-            if i == 1
-                connections[i] = [i+1, Ni]
-            elseif i != Ni
-                 connections[i] = [i-1,i+1]
-            else
-                connections[i] = [1, i-1]
+    p1g = zeros(Int16,0) #groups we are using
+    p1c = zeros(Int16,0) #centre groups that we search for links from (subet of p1g)
+
+    g_p = rand(1:size(Network)[1]) #base group of p1 that is doing the connecting! now need to find n neighbours
+
+    while g_p + base in all_nodes #making sure starting element is not used in anyother connections
+        g_p = rand(1:size(Network)[1])
+    end 
+
+    append!(p1g, g_p)
+    append!(p1c, g_p)
+
+    if N_connections > 1 #we need more connections!
+
+        netw = Network[:,g_p] #connected populations to randomly selected group
+        cons = findall(>(0), netw) #all connectedions of randomly selected group
+
+        if N_connections -1 < length(cons) #the neighbours more neighbours than required
+            append!(p1g,shuffle(cons)[1:(N_connections- 1)])
+        elseif N_connections -1 == length(cons) #exactly the right amount of neighbours
+            append!(p1g,cons)
+        else #we need more neighbours... need to pick one of the connections that is not the primary
+            append!(p1g,cons) #first append all neighbours
+
+            while N_connections > length(p1g)
+                non_central_groups = setdiff(p1g,p1c)
+
+                new_central = rand(non_central_groups)
+
+                append!(p1c,new_central)
+
+                netw = Network[:,new_central] #connected populations to randomly selected group
+                cons = findall(>(0), netw) #all connectedions of randomly selected group
+
+                unique_cons = setdiff(cons, p1g)
+
+                t_cons = length(unique_cons) + length(p1g)
+                if N_connections <= t_cons
+                append!(p1g,shuffle(unique_cons)[1:N_connections-length(p1g)])
+                else 
+                    append!(p1g,unique_cons)
+                end
             end
-        end
-     
-    elseif type_c == "t" #every population connects to another
-        
-        for i in 1:Ni
-            
-            co = Vector(1:Ni)
-            filter!(e->e≠i,co)
-            connections[i] = co
-            
-        end
-    else #line
-        for i in 1:Ni
-            if i == 1
-                connections[i] = [i+1]
-            elseif i != Ni
-                connections[i] = [i-1,i+1]
-            else
-                connections[i] = [i-1]
-            end
+
         end
     end
     
-    return connections 
-end
+    return shuffle(p1g .+ base)
 
+
+end
 
 end

@@ -29,38 +29,31 @@ struct Meta_Data <: Data_Input
     Fitted::Bool #is model run with params from previous fitting?
     years::Float32 #years simulation will run for
     S_day::Int16 #starting date of simulation
-    N_ensemble::Int16 #number of runs in an ensemble
+    N_ensemble::Int64 #number of runs in an ensemble
     Identical::Bool #if we params to be drawn from dist or just means of dist
     Seasonal::Bool #If model is seasonal
-    N_Pop::Int8 #number of populations, must match the number of population files in input
-    N_Inf::Int8 #number of populations init with ASF
-    N_Seed::Int8 #population we will seed with
-    C_Type::String #what kind of connection we want to init with between populations, line (l), circular (c), total (t), or off (o)
-    C_Str::Float32 #strength of the connections between populations, note this is only for l,c,t
     Network::String #Type of network used for model random (r), scale-free (s), or small worlds (w)
     N_param::Float32 #Network parameter (only for small worlds)
-    
-    function Meta_Data(input, numv, verbose)
+    N_Pop::Int8 #number of populations we want!
+    N_Seed::Int8 #population seeded with ASF
+    N_Con::Int8 #Number of connecting groups between populations
+
+    function Meta_Data(input, verbose)
        
-        Mn = parse(Int8, input.Value[1])
-       
-        F = (input.Value[2] == "true")
-       
-        Ny = parse(Int16, input.Value[3])
-      
-        Ne = parse(Int16,input.Value[4])
-       
-        I  = (input.Value[5] == "true")
-        S  = (input.Value[6] == "true")
-        Np = parse(Int8, input.Value[7])
-        Ni = parse(Int8, input.Value[8])
-        Ns = parse(Int16, input.Value[9])
-        Ct = input.Value[10]
-        Cs = parse(Float32, input.Value[11])
-        Nw = input.Value[12]
-        Nps= parse(Float32, input.Value[13])
-        Sd = parse(Int16, input.Value[14])
-        
+        Mn = parse(Int8, input.Value[1]) #model
+        F = (input.Value[2] == "true") #Fitted
+        Ny = parse(Int16, input.Value[3])#years
+        Sd = parse(Int16, input.Value[4])
+        Ne = parse(Int64,input.Value[5])# number of runs 
+        I  = (input.Value[6] == "true") #indetical
+        S  = (input.Value[7] == "true") #seasonal
+        Nw = input.Value[8]
+        Nps= parse(Float32, input.Value[9])
+
+        Np = parse(Int8, input.Value[10]) #number of populations
+        Ns = parse(Int8, input.Value[11]) #population seeded with ASF
+        NC = parse(Int8, input.Value[12]) #average degree of population
+
         if verbose
             if Mn == 1
                 @info "ODE Model"
@@ -98,9 +91,15 @@ struct Meta_Data <: Data_Input
             if Ne > 1000
                 @warn "Running with ensemble size of $(Ne)"
             end
+
+            if Ns > Np
+                @warn "Seeding ASF in population outside of population limit"
+                Ns = copy(Np)
+            end
         end
 
-        new(Mn,F,Ny,Sd,Ne,I,S,Np,Ni,Ns,Ct,Cs,Nw,Nps)
+        new(Mn,F,Ny,Sd,Ne,I,S,Nw, Nps, Np,Ns,NC,PNT)
+    
         
     end
 end
@@ -118,9 +117,9 @@ struct Population_Data <: Data_Input
     N_e::Vector{Float64} #% of population seeded in exposed
     N_i::Vector{Float64} #% of population seeded in infected
     
-    Litter_n::Vector{Float64} #number of litters per year
-    Litter_s::Vector{Float64} #litter size
-    Litter_mu::Vector{Float64} #first year mortality rate
+    LN::Vector{Float64} #number of litters per year
+    LS::Vector{Float64} #litter size
+    LM::Vector{Float64} #first year mortality rate
    
     Density_rate::Vector{Float32} #percent of natural birth/deaths that are NOT related to population density (0-1)
     Density_power::Vector{Float32} #power of K/N or N/K use for density birth/death rates
@@ -189,7 +188,7 @@ struct Population_Data <: Data_Input
             if Den[1] > 10
                 @warn "High starting density of $(Den[1])"
             end
-            if Sim.Model == 3
+            if sim.Model == 3
                 @info "Boar to group ratio of $(Br[1])"
                 @info "Mean feral connectivity of $(Ni[1])"
                 if (Nf[1] > 1000) | (Nf[1] < 100)
@@ -203,9 +202,9 @@ struct Population_Data <: Data_Input
                 @warn "Mean feral group size of $(Sf[1])"
             end
             
-            mean_births = LN[1]*LS[1]*(1-LM[1])
+            mean_births = 0.5*LN[1]*LS[1]*(1-LM[1])/365
             
-            if (mean_births > 0.01) | mean_births < 0.001)
+            if (mean_births > 0.01) | (mean_births < 0.001)
                 @warn "Birth rate of $(mean_births)"
             end  
 
@@ -213,9 +212,6 @@ struct Population_Data <: Data_Input
                 @warn "Density_rate must be between 0-1"
             end 
 
-            if (Bd[1] > 1 ) | (Bd[1] < 0)
-                @warn "β_density outside of 0-1"
-            end 
 
             if D[1] != 0.95
                 @warn "Death probability of $(D[1])"
@@ -231,7 +227,7 @@ struct Population_Data <: Data_Input
 
         end
      
-        new(Den, Nf Sf, Br, Ni, Npe, Npi, LN, LS, LM, Dr, Dp, Gf, Bf, Bff, C, D, L, R, Im, Df, Nl, Sl, Bl, Bfl, Dl)
+        new(Den, Nf, Sf, Br, Ni, N_e, N_i, LN, LS, LM, Dr, Dp, Gf, Bf, Bff, C, D, L, R, Im, Df, Nl, Sl, Bl, Bfl, Dl)
     end
     
 end
@@ -324,26 +320,26 @@ struct Model_Data
     =#
     MN::Int8 #which model we are running with (1- ODE, 2-Tau Homogeneous, 3-Tau Heterogeneous)
     Time::Tuple{Float32, Float32} #Model run time
-    NR::Int16 #number of runs in ensemble!
+    NR::Int64 #number of runs in ensemble!
     U0::Vector{Int32} #Initial Population
     Parameters::Model_Parameters #Model parameters
     Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path; verbose = false, fitting_rewire = 0)
+    function Model_Data(Path; pop_net= 0, verbose = false)
         #custom_network parameter used for fitting!
         sim, pops, sea = read_inputs(Path, verbose)
 
         Time = (sim.S_day,sim.years*365+sim.S_day)
 
         #now building feral pig network
-        network, counts = Network.build(sim, pops, fitting_rewire, verbose) 
+        network, counts = Network.build(sim, pops, verbose, pop_net) 
         
         #Now using network to build init pops
         S0 = Population.build_s(sim, pops, network, counts, verbose) #initial populations
      
         Parameters = Model_Parameters(sim, pops, sea, S0, counts, network)
     
-            U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
+        U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
         new(sim.Model,Time, sim.N_ensemble, U0, Parameters, pops)
         
     end
@@ -420,7 +416,7 @@ function parameter_build(sim, pops, sea, init_pops, counts)
             λ[cs[i]+1:cs[i]+nf] .= data.Decay_f[1]
             λ[cs[i]+nf+1:cs[i+1]] .= data.Decay_l[1]
             
-            birth_rate = data.LN[1]*data.LS[1]*data.LM[1]
+            birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-data.LM[1])/365
             μ_p[cs[i]+1:cs[i+1]] .= birth_rate
 
         else #running of distros
@@ -445,7 +441,7 @@ function parameter_build(sim, pops, sea, init_pops, counts)
             λ[cs[i]+nf+1:cs[i+1]] .= rand(λ_ld,nl)
 
             
-            μ_p[cs[i]+1:cs[i+1]] =  rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) 
+            μ_p[cs[i]+1:cs[i+1]] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) ./ 365
             
         end
 
@@ -503,6 +499,8 @@ function parameter_build(sim, pops, sea, init_pops, counts)
     
 end
 
+
+
 function read_inputs(path, verbose)
     #=
     Function to read in the data for the tau simulation. Expecting a file for simulation meta data, 
@@ -518,14 +516,14 @@ function read_inputs(path, verbose)
     =#
     Simulation = CSV.read("$(path)/Simulation_Data.csv", DataFrame; comment="#") #reading in simulation meta data
     
-    n_inf  = 1#infected_populations(Simulation) #what population is seeded with ASF (custom population!)
-
-    Sim = Meta_Data(Simulation, n_inf, verbose)
+    Sim = Meta_Data(Simulation, verbose)
+    N_P_files = size(readdir("$(Path)/Population"))[1] #number of different population region files we are reading in
+        
+    #number of population input files!
+    Pops = Vector{Population_Data}(undef, N_P_files) #number of different regions we are population regions
+    Seasons = Vector{Seasonal_effect}(undef, N_P_files) #number of different seasons
     
-    Pops = Vector{Population_Data}(undef, Sim.N_Pop)
-    Seasons = Vector{Seasonal_effect}(undef, Sim.N_Pop)
-    
-    for i in 1:Sim.N_Pop
+    for i in 1:N_P_files
         pop_data = CSV.read("$(path)/Population/Population_$(i).csv", DataFrame; comment="#") 
         Pops[i] = Population_Data(pop_data, Sim, verbose)
 

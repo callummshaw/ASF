@@ -2,6 +2,7 @@
 module ASF
 
 export Model
+export Model_sim
 
 """
    Model(input_path,out)
@@ -10,6 +11,8 @@ Function that runs the ASF models, ``input_path`` is the location of input data,
 
 
 using DifferentialEquations
+
+using QuadGK
 using LinearAlgebra
 using Distributions
 using SparseArrays
@@ -54,7 +57,9 @@ function Model(input_path,out)
             sol = solve(prob_ode, saveat = 1,reltol=1e-8) #running ode model!
             
         else #running TAU model!
-            if mod(i,50) == 0 
+            total = i1.NR
+            scale = total ÷ 100
+            if mod(i,scale) == 0 
                 @info "$(i) sims of $(i1.NR)!"
             end
             nt = input.Parameters.Populations.cum_sum[end] #total number of groups and/or farms
@@ -137,9 +142,9 @@ function Model(input_path,out)
         else
             
             if MN in [1,2]
-                output[i,:] = Analysis.summary_stats_homogeneous(sol)
+                output[i,:] = Analysis.summary_stats_homogeneous(sol, false)
             else 
-                output[i,:] = Analysis.summary_stats_heterogeneous(sol)
+                output[i,:] = Analysis.summary_stats_heterogeneous(sol,false)
             end
 
         end
@@ -147,6 +152,137 @@ function Model(input_path,out)
     end
     return output
 end
+
+function Model_sim(input_path,out, br, dr)
+    #wrapper function to run ASF models!
+
+    i1 = Input.Model_Data(input_path, verbose = false)
+
+    n_sims  = i1.NR
+    n_time  = i1.Time
+    n_group = i1.Parameters.Populations.total[1]
+
+    MN = i1.MN
+   
+    output = zeros(n_sims)
+
+    for i in 1:i1.NR
+        
+        
+        input = Input.Model_Data(input_path); #all input data!
+    
+        if MN == 1 #running ODE model!
+
+            params = convert_homogeneous(input.Parameters) #converting params to single array!
+            
+             params[8] *= dr
+             params[16] *= dr
+                
+             params[2] = br   
+             params[15] = birthpulse_norm(params[13],br)
+                
+            
+            prob_ode = ODEProblem(Models.ASF_M1, input.U0, input.Time, params) #setting up ode model
+            
+            sol = solve(prob_ode, saveat = 1,reltol=1e-8) #running ode model!
+            
+        else #running TAU model!
+            total = i1.NR
+            
+            nt = input.Parameters.Populations.cum_sum[end] #total number of groups and/or farms
+            
+            nc = 5 #number of classes (SEIRC)
+            eqs = 11 #number of processes
+
+            #Matrix of all the transitions between classes for Gillespie model
+            dc = sparse(zeros(nt*nc,nt*eqs))
+
+            dc[0*nc*nt+1:nc*nt*eqs+nc:end] .= 1
+            dc[1*nc*nt+1:nc*nt*eqs+nc:end] .= -1
+            dc[2*nc*nt+1:nc*nt*eqs+nc:end] .= -1
+            dc[10*nc*nt+1:nc*nt*eqs+nc:end] .= 1
+
+            dc[2*nc*nt+2:nc*nt*eqs+nc:end] .= 1
+            dc[3*nc*nt+2:nc*nt*eqs+nc:end] .= -1
+            dc[4*nc*nt+2:nc*nt*eqs+nc:end] .= -1
+
+            dc[4*nc*nt+3:nc*nt*eqs+nc:end] .= 1
+            dc[5*nc*nt+3:nc*nt*eqs+nc:end] .= -1
+            dc[6*nc*nt+3:nc*nt*eqs+nc:end] .= -1
+            dc[7*nc*nt+3:nc*nt*eqs+nc:end] .= -1
+
+            dc[7*nc*nt+4:nc*nt*eqs+nc:end] .= 1
+            dc[8*nc*nt+4:nc*nt*eqs+nc:end] .= -1
+            dc[10*nc*nt+4:nc*nt*eqs+nc:end] .= -1
+
+
+            dc[5*nc*nt+5:nc*nt*eqs+nc:end] .= 1
+            dc[6*nc*nt+5:nc*nt*eqs+nc:end] .= 1
+            dc[9*nc*nt+5:nc*nt*eqs+nc:end] .= -1;
+
+            function regular_c(du,u,p,t,counts,mark)  
+                mul!(du,dc,counts)
+                nothing
+            end
+
+            if MN == 2 #M2!
+
+                params = convert_homogeneous(input.Parameters) #converting params to single array!
+                
+                params[8] *= dr
+                params[16] *= dr
+                
+                params[2] = br
+                
+                params[15] = birthpulse_norm(params[13],br)
+                
+                rj = RegularJump(Models.ASF_M2, regular_c, eqs)
+                prob = DiscreteProblem(input.U0,input.Time, params)
+                jump_prob = JumpProblem(prob,Direct(),rj)
+                sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
+                
+            elseif (MN == 3) & (input.Parameters.Populations.pop == 1) #M3 with one pop!
+                
+                params = convert_heterogeneous(input.Parameters) #converting params to single array!
+                
+                rj = RegularJump(Models.ASF_M3S, regular_c, eqs*nt)
+                U0 = convert(Vector{Int8}, input.U0)
+                prob = DiscreteProblem(U0,input.Time, params)#hetero_single_test(input.Parameters))
+                jump_prob = JumpProblem(prob,Direct(),rj)
+                sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
+
+            else #M3 with multipopulations!
+            
+                rj = RegularJump(Models.ASF_M3, regular_c, eqs*nt)
+                U0 = convert(Vector{Int16}, input.U0)
+                
+                prob = DiscreteProblem(U0,input.Time, input.Parameters)
+                jump_prob = JumpProblem(prob,Direct(),rj)
+                sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
+
+            end
+
+        end
+
+    end_out = Analysis.summary_stats_endemic(sol)
+    
+    output[i] = end_out
+    end
+   
+    return sum(output .== 9999)
+end
+
+
+function birthpulse_norm(s, DT)
+   
+    integral, err = quadgk(x -> exp(-s*cos(pi*x/365)^2), 1, 365, rtol=1e-8);
+    k = (365*DT)/integral 
+    
+    return k
+end
+
+
+
 
 
 function convert_homogeneous(input)
