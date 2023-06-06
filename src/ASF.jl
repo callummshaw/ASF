@@ -25,7 +25,6 @@ function Model(input_path,out)
     #wrapper function to run ASF models!
 
     i1 = Input.Model_Data(input_path, verbose = true)
-
     n_sims  = i1.NR
     n_time  = i1.Time
     n_group = i1.Parameters.Populations.total[1]

@@ -4,6 +4,7 @@ module Network
 using Distributions
 using Graphs
 using LinearAlgebra
+using Random
 
 export build
 export Network_Data
@@ -24,11 +25,13 @@ mutable struct Network_Data
     density::Vector{Float32}
     area::Vector{Float32}
 
+    connections::Matrix{Int16}
     function Network_Data(feral,farm, inf, density,area)
         n = size(feral)[1]
         t = feral + farm
         cs = pushfirst!(cumsum(t),0)
-        new(feral,farm,n,t,cs, inf, density, area)
+        
+        new(feral,farm,n,t,cs, inf, density, area,zeros(Int16,2,2))
     end
 end 
 
@@ -37,7 +40,7 @@ end
 function build(sim, pops, verbose, pop_net)
 
     #This function builds the network! (trivial for M1 and M2)
-    n_p = sim.N_pop # number of populations per region
+    n_p = sim.N_Pop # number of populations per region
     n_r = size(pops)[1] #number of regions
     n_pops = n_p*n_r #total number of populations
     network = Vector{Matrix{Int16}}(undef, n_pops) #vector to store all the 
@@ -152,15 +155,17 @@ function build(sim, pops, verbose, pop_net)
         network[1] = [1][:,:]
         
     end
-
-    counts = Network_Data(feral_pops,farm_pops, sim.N_Inf,[0.0],[0.0])
     
+    counts = Network_Data(feral_pops,farm_pops, sim.N_Seed,[0.0],[0.0])
+
     if (n_pops > 1) & (sim.Model == 3) #model 3 with more than 1 population!
-        combined_network = combine_networks(network,sim,counts,pop_net)
+        combined_network, Nodes = combine_networks(network,sim,counts,pop_net)
     else
         combined_network = network[1] #no need to combine!
     end
     
+    counts.connections = Nodes
+
     return combined_network, counts
 
 end
@@ -172,16 +177,20 @@ function combine_networks(network,sim, counts, pop_net)
     n_pops = counts.pop
     n_cs = counts.cum_sum
     N = n_cs[end]
-
     meta_network = zeros(N,N)
+
+    if pop_net isa Int64
+        @warn "Must input network structure, defaulting to line!"
+        pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(path_graph(n_pops))))
+    else
+        pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(pop_net))) #matrix of our meta-population network
+    end
   
     #combine all networks into one large "meta" network, note still no links between individual networks.
     for i in 1:n_pops #looping through populations
         meta_network[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] = network[i] # the  network
     end
-
     #now we need to connect all the networks with each other!
-    pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(pop_net))) #matrix of our meta-population network
     
     if size(pop_matrix)[1] != n_pops
         @warn "Population level network and number of populations generated from input do not match, defaulting to line!"
@@ -191,7 +200,12 @@ function combine_networks(network,sim, counts, pop_net)
     connections = findall(>(0),pop_matrix) #vector with all our connections
     
     all_nodes = zeros(Int16,0) 
-
+    
+    S1 = zeros(Int16,0) 
+    S2 = zeros(Int16,0)
+    S1P = zeros(Int16,0) 
+    S2P = zeros(Int16,0)
+    
     for i in connections
         p1 = i[1]
         p2 = i[2]
@@ -205,6 +219,11 @@ function combine_networks(network,sim, counts, pop_net)
         append!(all_nodes,N1_nodes)
         append!(all_nodes,N2_nodes)
 
+        append!(S1,N1_nodes)
+        append!(S2,N2_nodes)
+
+        append!(S1P,repeat([p1],length(N1_nodes)))
+        append!(S2P,repeat([p2],length(N1_nodes)))
         for (j,v1) in enumerate(N1_nodes)
             v2 = N2_nodes[j]
 
@@ -214,7 +233,13 @@ function combine_networks(network,sim, counts, pop_net)
         end
     end 
 
-    return meta_network
+    SS_Nodes = zeros(Int16,length(S1),4)
+    SS_Nodes[:,1] = S1
+    SS_Nodes[:,2] = S2
+    SS_Nodes[:,3] = S1P
+    SS_Nodes[:,4] = S2P
+
+    return meta_network, SS_Nodes
 
 end
 
@@ -268,7 +293,6 @@ function find_nodes(Network, N_connections, all_nodes, base)
     end
     
     return shuffle(p1g .+ base)
-
 
 end
 

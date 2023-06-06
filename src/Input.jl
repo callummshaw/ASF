@@ -98,7 +98,7 @@ struct Meta_Data <: Data_Input
             end
         end
 
-        new(Mn,F,Ny,Sd,Ne,I,S,Nw, Nps, Np,Ns,NC,PNT)
+        new(Mn,F,Ny,Sd,Ne,I,S,Nw, Nps, Np,Ns,NC)
     
         
     end
@@ -229,8 +229,7 @@ struct Population_Data <: Data_Input
      
         new(Den, Nf, Sf, Br, Ni, N_e, N_i, LN, LS, LM, Dr, Dp, Gf, Bf, Bff, C, D, L, R, Im, Df, Nl, Sl, Bl, Bfl, Dl)
     end
-    
-end
+end 
 
 struct Seasonal_effect
     #= 
@@ -244,7 +243,6 @@ struct Seasonal_effect
     #Decay effects sine function 
     Decay_amp::Float32 #amp of function
     Decay_offset::Float32 #offset of decay, running with cosine so maximum at start of year (European...)
-
     function Seasonal_effect(input,pop_data,verbose)
         
         Bw = input.Value[1]
@@ -278,7 +276,8 @@ mutable struct Model_Parameters
     =#
     β::Matrix{Float32} #transmission matrix
     β_b::Matrix{Int16} #what feral groups are linked to each other, for births
-    β_d::Matrix{Int16} #used to identify feral groups and farms for each population for density calcualtions
+    β_p::Vector{Int16} #used to interpopulation trans
+
 
     μ_p::Vector{Float32} #birth/death rate at K
     K::Vector{Int16} #carrying capicity
@@ -306,10 +305,10 @@ mutable struct Model_Parameters
     
     function Model_Parameters(sim, pops, sea, U0, Populations, network)
         
-        β, connected_pops, connected_births = Beta.construction(sim, pops, Populations, network)
+        β, connected_pops, beta_pop = Beta.construction(sim, pops, Populations, network)
         μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations)
         
-        new(β, connected_births, connected_pops, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
+        new(β, connected_pops, beta_pop, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
     end
     
 end
@@ -338,8 +337,9 @@ struct Model_Data
         S0 = Population.build_s(sim, pops, network, counts, verbose) #initial populations
      
         Parameters = Model_Parameters(sim, pops, sea, S0, counts, network)
-    
-        U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
+        
+        U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, counts, verbose) #burn in pop to desired start day and seed desired ASF!
+        
         new(sim.Model,Time, sim.N_ensemble, U0, Parameters, pops)
         
     end
@@ -362,7 +362,9 @@ function parameter_build(sim, pops, sea, init_pops, counts)
     
     K = init_pops #carrying capacity of each group
     
-    n_pops = sim.N_Pop
+    n_p = sim.N_Pop # number of populations per region
+    n_r = size(pops)[1] #number of regions
+    n_pops = n_p*n_r #total number of populations
 
     # All other params
     n_groups = length(K)
@@ -385,16 +387,13 @@ function parameter_build(sim, pops, sea, init_pops, counts)
     la = Vector{Float32}(undef, n_pops)
     lo = Vector{Float32}(undef, n_pops)
 
-    if sim.Model == 3
-        n_pops  = counts.pop
-    else
-        n_pops = 1
-    end
     
     for i in 1:n_pops
         
-        data =  pops[i]
-        data_s = sea[i]
+        j = (i-1) ÷ n_p + 1
+        
+        data =  pops[j]
+        data_s = sea[j]
 
         nf = counts.feral[i]
         nl = counts.farm[i]
@@ -517,7 +516,7 @@ function read_inputs(path, verbose)
     Simulation = CSV.read("$(path)/Simulation_Data.csv", DataFrame; comment="#") #reading in simulation meta data
     
     Sim = Meta_Data(Simulation, verbose)
-    N_P_files = size(readdir("$(Path)/Population"))[1] #number of different population region files we are reading in
+    N_P_files = size(readdir("$(path)/Population"))[1] #number of different population region files we are reading in
         
     #number of population input files!
     Pops = Vector{Population_Data}(undef, N_P_files) #number of different regions we are population regions

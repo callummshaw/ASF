@@ -10,25 +10,30 @@ export construction
 function construction(sim, pops, counts, network)
     #this function is to convert the base network we have created into a transmission coefficant matrix
 
-    n_pops = counts.pop
+
+    n_p = sim.N_Pop # number of populations per region
+    n_r = size(pops)[1] #number of regions
+    n_pops = n_p*n_r #total number of populations
+   
     n_cs = counts.cum_sum
+
     beta = Float32.(copy(network))
     connected_births = copy(network)
     
     connected_births[connected_births .!= 200] .= 0 #only wanted connected groups within same pop
-    connected_births =  connected_births .÷ 200 #setting to ones
-    connected_pops = copy(connected_births)
+    connected_pops =  connected_births .÷ 200 #setting to ones
+    
+    beta_inter = zeros(Float32,n_pops)
 
     Mn = sim.Model
     
     if Mn == 3 #building beta on network!
         for i in 1:n_pops #iterating through
 
-            data = pops[i]
-            
-            connected_pops[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] *= i
-        
+            j = (i-1) ÷ n_p + 1
 
+            data = pops[j]
+            #connected_pops[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] *= i
             beta_pop = beta[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]]
             
 
@@ -39,6 +44,7 @@ function construction(sim, pops, counts, network)
                     beta_pop[beta_pop .== 200] .= data.B_ff[1] #inter feral
                     beta_pop[beta_pop .== 300] .= data.B_fl[1] #farm feral
                     beta_pop[beta_pop .== 400] .= data.B_l[1] #intra farm
+                    beta_inter[i] = data.B_ff[1]
                 else #from dist
                     i_f = TruncatedNormal(data.B_f[1],data.B_f[2],0,5) #intra group
                     i_ff = TruncatedNormal(data.B_ff[1],data.B_ff[2],0,5) #inter group
@@ -47,11 +53,12 @@ function construction(sim, pops, counts, network)
                     n_inter = length(beta_pop[beta_pop .== 200])
 
                     b_intra = rand(i_f, n_intra)
-                    b_inter = rand(i_ff, n_inter) .* (1/n_aim)
+                    b_inter = rand(i_ff, n_inter) 
 
                     beta_pop[beta_pop .== 100] = b_intra
                     beta_pop[beta_pop .== 200] = b_inter  
 
+                    beta_inter[i] = rand(i_ff) 
 
                     if counts.farm[i] > 0
                         i_fl = TruncatedNormal(data.B_fl[1],data.B_fl[2],0,5)
@@ -92,6 +99,8 @@ function construction(sim, pops, counts, network)
                 beta_pop[beta_pop .== 200] .= beta_inter/6 #inter feral
                 beta_pop[beta_pop .== 300] .= data.B_fl[1] #farm feral not_fitted!
                 beta_pop[beta_pop .== 400] .= data.B_l[1] #intra farm not fitted!
+                
+                beta_inter[i] = beta_inter/6
             end
 
             beta[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] = beta_pop
@@ -138,7 +147,7 @@ function construction(sim, pops, counts, network)
         end
     end 
 
-    return beta, connected_pops, connected_births
+    return beta, connected_pops, beta_inter
 
 end
 
