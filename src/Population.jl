@@ -19,7 +19,7 @@ function spinup_and_seed(sim,pops, S0,Parameters,counts,verbose)
 
     #Calculating the correct population at the start date
    
-    if Mn == 3 & pops == 1 #Model 3 with single population
+    if Mn == 3 & Np == 1 #Model 3 with single population
         S1 = burn_m3_single(sim,S0, Parameters) 
     elseif Mn == 3 #Model 3 with multiple population 
         S1 = burn_m3_full(sim,S0,Parameters)
@@ -117,8 +117,8 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                 end
                 
 
-                si = pop_data.cum_sum[i] #start index of pop
-                ei = pop_data.cum_sum[i+1] #end index of pop
+                si = counts.cum_sum[i] #start index of pop
+                ei = counts.cum_sum[i+1] #end index of pop
                 Network = Parameters.β_b[si+1:ei,si+1:ei]
 
                 seeded_groups = find_nodes(Network,n_groups,si) #groups we are seeding ASF in
@@ -309,11 +309,11 @@ function asf_model_burn_multi_full(out,u,p,t)
         S = Vector{UInt8}(u[si:ei]) #population we want!
 
         K = p.K[si:ei]
-
+        print
         tg = length(S) #total groups in all populations
         
-        p_mag = @. p.k[si:ei]*exp(-p.bw[si:ei]*cos.(pi*(t+p.bo[si:ei])/365)^2) #birth pulse value at time t
-        Deaths = @. p.μ_p[si:ei]*(0.75 + ((1-0.75))*sqrt(S/K))*p.g[si:ei] #rate
+        p_mag = @. p.k[i]*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
+        Deaths = @. p.μ_p[si:ei]*(0.75 + ((1-0.75))*sqrt(S/K))*p.g[i] #rate
         Births = @. p_mag*(0.75 * S + ((1-0.75)) * sqrt(S * K))#total! (rate times NP)
 
         #now stopping boar births
@@ -323,13 +323,13 @@ function asf_model_burn_multi_full(out,u,p,t)
         mask_p_s = (S .> 1) .& (K .> 1) #moving it to postive sow groups with at least 2 pigs
         Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
         
-        n_empty  = sum(Np .== 0 )   
+        n_empty  = sum(S .== 0 )   
         
         if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
             
             n_r = (n_empty/tg)^2 #squared to reduce intesity
             
-            dd = copy(Np)
+            dd = copy(S)
             dd[dd .< 2] .= 0
             connected_pops = p.β_b[si:ei,si:ei] * dd
             #Groups with 3 or more pigs can have emigration
@@ -344,9 +344,9 @@ function asf_model_burn_multi_full(out,u,p,t)
 
         end 
         
-
-        out[2*(si-1)+1 :2:2*ei] .= Births
-        out[2*(si-1)+2 :2:2*ei] .= S .* Deaths
+      
+        out[2*(si-1)+1:2:2*ei] .= Births
+        out[2*(si-1)+2:2:2*ei] .= S .* Deaths
        
     end
 

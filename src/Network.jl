@@ -159,18 +159,17 @@ function build(sim, pops, verbose, pop_net)
     counts = Network_Data(feral_pops,farm_pops, sim.N_Seed,[0.0],[0.0])
 
     if (n_pops > 1) & (sim.Model == 3) #model 3 with more than 1 population!
-        combined_network, Nodes = combine_networks(network,sim,counts,pop_net)
+        combined_network, Nodes = combine_networks(network,sim,counts,pop_net, verbose)
+        counts.connections = Nodes
     else
         combined_network = network[1] #no need to combine!
     end
-    
-    counts.connections = Nodes
 
     return combined_network, counts
 
 end
 
-function combine_networks(network,sim, counts, pop_net)
+function combine_networks(network,sim, counts, pop_net,verbose)
     #we have generated all the networks, but they need to be combined!
 
     N_connections = sim.N_Con #number of connecting groups between populations
@@ -180,7 +179,9 @@ function combine_networks(network,sim, counts, pop_net)
     meta_network = zeros(N,N)
 
     if pop_net isa Int64
-        @warn "Must input network structure, defaulting to line!"
+        if verbose
+            @warn "Must input network structure, defaulting to line!"
+        end
         pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(path_graph(n_pops))))
     else
         pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(pop_net))) #matrix of our meta-population network

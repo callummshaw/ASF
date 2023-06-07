@@ -274,9 +274,11 @@ mutable struct Model_Parameters
     #=
     Structure to store key parameters
     =#
-    β::Matrix{Float32} #transmission matrix
+    
+    β::Matrix{Float32} #transmission matrix for inter_pop
+    β_i::Vector{Float32} #transmission for inter
     β_b::Matrix{Int16} #what feral groups are linked to each other, for births
-    β_p::Vector{Int16} #used to interpopulation trans
+    β_p::Vector{Float32} #used to interpopulation trans
 
 
     μ_p::Vector{Float32} #birth/death rate at K
@@ -305,10 +307,10 @@ mutable struct Model_Parameters
     
     function Model_Parameters(sim, pops, sea, U0, Populations, network)
         
-        β, connected_pops, beta_pop = Beta.construction(sim, pops, Populations, network)
+        β, βi,connected_pops, beta_pop = Beta.construction(sim, pops, Populations, network)
         μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations)
         
-        new(β, connected_pops, beta_pop, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
+        new(β, βi, connected_pops, beta_pop, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
     end
     
 end

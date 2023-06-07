@@ -57,10 +57,10 @@ function Model(input_path,out)
             
         else #running TAU model!
             total = i1.NR
-            scale = total ÷ 100
-            if mod(i,scale) == 0 
-                @info "$(i) sims of $(i1.NR)!"
-            end
+            #scale = total ÷ 100
+            #if mod(i,scale) == 0 
+             #   @info "$(i) sims of $(i1.NR)!"
+            #end
             nt = input.Parameters.Populations.cum_sum[end] #total number of groups and/or farms
             
             nc = 5 #number of classes (SEIRC)
@@ -118,7 +118,7 @@ function Model(input_path,out)
 
             else #M3 with multipopulations!
             
-                rj = RegularJump(Models.ASF_M3, regular_c, eqs*nt)
+                rj = RegularJump(Models.ASF_M3_full, regular_c, eqs*nt)
                 U0 = convert(Vector{Int16}, input.U0)
                 
                 prob = DiscreteProblem(U0,input.Time, input.Parameters)
@@ -252,7 +252,7 @@ function Model_sim(input_path,out, br, dr)
 
             else #M3 with multipopulations!
             
-                rj = RegularJump(Models.ASF_M3, regular_c, eqs*nt)
+                rj = RegularJump(Models.ASF_M3_full, regular_c, eqs*nt)
                 U0 = convert(Vector{Int16}, input.U0)
                 
                 prob = DiscreteProblem(U0,input.Time, input.Parameters)
@@ -320,9 +320,9 @@ function convert_heterogeneous(input)
     beta = input.β
     beta_con = input.β_b
     n_g = size(input.K)[1]
-    params[1]  = beta[diagind(beta)]
-    params[2]  = beta.*beta_con
-    params[3]  = input.β_d
+    params[1]  = input.β_i
+    params[2]  = beta
+    params[3]  = beta_con
     
     params[4]  = input.μ_p[1]
     params[5]  = input.K

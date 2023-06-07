@@ -18,12 +18,13 @@ function construction(sim, pops, counts, network)
     n_cs = counts.cum_sum
 
     beta = Float32.(copy(network))
+    beta_i = zeros(Float32,size(beta)[1])
     connected_births = copy(network)
     
     connected_births[connected_births .!= 200] .= 0 #only wanted connected groups within same pop
     connected_pops =  connected_births .÷ 200 #setting to ones
     
-    beta_inter = zeros(Float32,n_pops)
+    beta_interp = zeros(Float32,n_pops)
 
     Mn = sim.Model
     
@@ -39,12 +40,12 @@ function construction(sim, pops, counts, network)
 
             if !sim.Fitted
                 if sim.Identical #no variation, just mean of dist
-
-                    beta_pop[beta_pop .== 100] .= data.B_f[1] #intra feral
+                    beta_i[n_cs[i]+1:n_cs[i+1]].=data.B_f[1]
+                    beta_pop[beta_pop .== 100] .= 0 
                     beta_pop[beta_pop .== 200] .= data.B_ff[1] #inter feral
                     beta_pop[beta_pop .== 300] .= data.B_fl[1] #farm feral
                     beta_pop[beta_pop .== 400] .= data.B_l[1] #intra farm
-                    beta_inter[i] = data.B_ff[1]
+                    beta_interp[i] = data.B_ff[1]
                 else #from dist
                     i_f = TruncatedNormal(data.B_f[1],data.B_f[2],0,5) #intra group
                     i_ff = TruncatedNormal(data.B_ff[1],data.B_ff[2],0,5) #inter group
@@ -55,10 +56,12 @@ function construction(sim, pops, counts, network)
                     b_intra = rand(i_f, n_intra)
                     b_inter = rand(i_ff, n_inter) 
 
-                    beta_pop[beta_pop .== 100] = b_intra
+                    beta_i[n_cs[i]+1:n_cs[i+1]] .= b_intra
+                    beta_pop[beta_pop .== 100] .= 0
+                    
                     beta_pop[beta_pop .== 200] = b_inter  
 
-                    beta_inter[i] = rand(i_ff) 
+                    beta_interp[i] = rand(i_ff) 
 
                     if counts.farm[i] > 0
                         i_fl = TruncatedNormal(data.B_fl[1],data.B_fl[2],0,5)
@@ -94,13 +97,13 @@ function construction(sim, pops, counts, network)
 
                 beta_intra  = df_beta_intra[rand_values[1]][1]
                 beta_inter = df_beta_inter[rand_values[2]][1]
-
-                beta_pop[beta_pop .== 100] .= beta_intra #intra feral
+                beta_i[n_cs[i]+1:n_cs[i+1]] .= beta_intra
+                beta_pop[beta_pop .== 100] .= 0#beta_intra #intra feral
                 beta_pop[beta_pop .== 200] .= beta_inter/6 #inter feral
                 beta_pop[beta_pop .== 300] .= data.B_fl[1] #farm feral not_fitted!
                 beta_pop[beta_pop .== 400] .= data.B_l[1] #intra farm not fitted!
                 
-                beta_inter[i] = beta_inter/6
+                beta_interp[i] = beta_inter/6
             end
 
             beta[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] = beta_pop
@@ -147,7 +150,7 @@ function construction(sim, pops, counts, network)
         end
     end 
 
-    return beta, connected_pops, beta_inter
+    return beta, beta_i, connected_pops, beta_interp
 
 end
 
