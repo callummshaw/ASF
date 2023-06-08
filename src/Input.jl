@@ -280,7 +280,6 @@ mutable struct Model_Parameters
     β_b::Matrix{Int16} #what feral groups are linked to each other, for births
     β_p::Vector{Float32} #used to interpopulation trans
 
-
     μ_p::Vector{Float32} #birth/death rate at K
     K::Vector{Int16} #carrying capicity
    
@@ -305,12 +304,16 @@ mutable struct Model_Parameters
 
     Populations::Network.Network_Data #breakdown of population
     
+    Dummy_N::Vector{Matrix{UInt8}}
+    Dummy_B::Vector{Float32}
+
     function Model_Parameters(sim, pops, sea, U0, Populations, network)
         
         β, βi,connected_pops, beta_pop = Beta.construction(sim, pops, Populations, network)
         μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations)
-        
-        new(β, βi, connected_pops, beta_pop, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
+        dummy = [zeros(UInt8, Populations.cum_sum[2], Populations.cum_sum[2]),zeros(Int16, Populations.cum_sum[2], Populations.cum_sum[2]),zeros(Int16, Populations.cum_sum[2], Populations.cum_sum[2])]
+        dummyb = zeros(Float32, Populations.cum_sum[2])
+        new(β, βi, connected_pops, beta_pop, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations, dummy, dummyb)
     end
     
 end

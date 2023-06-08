@@ -309,7 +309,7 @@ function asf_model_burn_multi_full(out,u,p,t)
         S = Vector{UInt8}(u[si:ei]) #population we want!
 
         K = p.K[si:ei]
-        print
+        
         tg = length(S) #total groups in all populations
         
         p_mag = @. p.k[i]*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
