@@ -121,8 +121,13 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                 ei = counts.cum_sum[i+1] #end index of pop
                 Network = Parameters.β_b[si+1:ei,si+1:ei]
 
+            
                 seeded_groups = find_nodes(Network,n_groups,si) #groups we are seeding ASF in
                
+                while seeded_groups == 0 
+                    seeded_groups = find_nodes(Network,n_groups,si) #groups we are seeding ASF in
+                end
+
                 for j in seeded_groups
                     g_p = K[j] #group carrying capacity
                     init_pop = S1[j]
@@ -488,7 +493,13 @@ function find_nodes(Network, N_connections, base)
 
             while N_connections > length(p1g)
                 non_central_groups = setdiff(p1g,p1c)
-
+                if isempty(non_central_groups)
+                    @warn "No Groups left to choose, will try again"
+                    println(N_connections)
+                    println(length(p1g))
+                    println(length(p1c))
+                    return 0
+                end
                 new_central = rand(non_central_groups)
 
                 append!(p1c,new_central)

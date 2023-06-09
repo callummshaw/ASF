@@ -11,9 +11,9 @@ Boar,0.2,0
 #Number of interconnection for groups within population
 N_int,6,0
 #Exposed population proportion in seeded populations (%) 
-Exp_p,0.25,0
+Exp_p,0.5,0
 #Infected population proportion in seeded populations (%)
-Inf_p,0.25,0
+Inf_pi,0.5,0
 #Litters per year
 Litter_n,0.84,0
 #Litter Size

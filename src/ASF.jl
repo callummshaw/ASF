@@ -21,7 +21,7 @@ include("Models.jl") #where all the models are!
 include("Input.jl") #the input
 include("Analyse.jl") #some simple analysis
 
-function Model(input_path,out)
+function Model(input_path,out, st)
     #wrapper function to run ASF models!
 
     i1 = Input.Model_Data(input_path, verbose = true)
@@ -109,6 +109,7 @@ function Model(input_path,out)
             elseif (MN == 3) & (input.Parameters.Populations.pop == 1) #M3 with one pop!
                 
                 params = convert_heterogeneous(input.Parameters) #converting params to single array!
+                params[10] *= sn[c]
                 
                 rj = RegularJump(Models.ASF_M3S, regular_c, eqs*nt)
                 U0 = convert(Vector{Int8}, input.U0)
@@ -165,7 +166,7 @@ function Model_sim(input_path,out, br, dr)
    
     output = zeros(n_sims)
 
-    for i in 1:i1.NR
+    for i in 1:n_sims
         
         
         input = Input.Model_Data(input_path); #all input data!
@@ -231,7 +232,7 @@ function Model_sim(input_path,out, br, dr)
                 params[8] *= dr
                 params[16] *= dr
                 
-                params[2] = br
+                params[4] = br
                 
                 params[15] = birthpulse_norm(params[13],br)
                 
@@ -243,6 +244,13 @@ function Model_sim(input_path,out, br, dr)
             elseif (MN == 3) & (input.Parameters.Populations.pop == 1) #M3 with one pop!
                 
                 params = convert_heterogeneous(input.Parameters) #converting params to single array!
+                
+                params[10] *= dr
+                params[19] *= dr
+                
+                params[4] *= br
+                
+                params[18] = birthpulse_norm(params[13],params[4])
                 
                 rj = RegularJump(Models.ASF_M3S, regular_c, eqs*nt)
                 U0 = convert(Vector{Int8}, input.U0)
@@ -265,9 +273,8 @@ function Model_sim(input_path,out, br, dr)
 
     end_out = Analysis.summary_stats_endemic(sol)
     
-    output[i] = end_out
+    output[i] = end_out 
     end
-   
     return sum(output .== 9999)
 end
 
