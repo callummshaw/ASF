@@ -11,11 +11,12 @@ using SparseArrays
 export burn_population
 export build_s
 
-function spinup_and_seed(sim,pops, S0,Parameters,counts,verbose)
+function spinup_and_seed(sim,pops, S0, Parameters, verbose)
     # wrapper function to burn in different populations to desired day, different methods for different models
     
+    
     Mn = sim.Model #model number
-    Np = counts.pop #number of populations!
+    Np = Parameters.Populations.pop #number of populations!
 
     #Calculating the correct population at the start date
    
@@ -42,7 +43,7 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
     n_classes = 5 #number of different classes
 
     if Mn != 3 #seedingin in single "group"
-        K = K[1]
+        K = K[1][1]
         data = pops[1]
         
         U1 = zeros(n_classes)
@@ -93,6 +94,8 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
 
             if i == n_inf #in seeded population!
                 
+                network_inf = counts.networks[i] #network of infected population (used for accrute seeding)
+
                 j = (i-1) ÷ n_p + 1
                 data =  pops[j]
 
@@ -119,18 +122,19 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
 
                 si = counts.cum_sum[i] #start index of pop
                 ei = counts.cum_sum[i+1] #end index of pop
-                Network = Parameters.β_b[si+1:ei,si+1:ei]
 
-            
-                seeded_groups = find_nodes(Network,n_groups,si) #groups we are seeding ASF in
+                seeded_groups = 0
                
                 while seeded_groups == 0 
-                    seeded_groups = find_nodes(Network,n_groups,si) #groups we are seeding ASF in
+                    seeded_groups = find_nodes(network_inf,n_groups) #groups we are seeding ASF in
                 end
 
                 for j in seeded_groups
-                    g_p = K[j] #group carrying capacity
-                    init_pop = S1[j]
+                    ki= K[i]
+                    
+                    g_p = ki[j] #group carrying capacity
+                    
+                    init_pop = S1[j + si]
                     ra = j -1 #needed for indexing!
                    
                     if g_p > 1 #sow population! (Asumming whole population infected or exposed!)
@@ -184,7 +188,7 @@ function burn_m3_single(sim,S0, PP)
         nothing
     end
 
-    params = [PP.β_b, PP.μ_p[1], PP.K, 0, PP.θ[1], PP.g[1], PP.bw[1], PP.bo[1], PP.k[1]]
+    params = [PP.μ_p[1], PP.K[1], 0, PP.g[1], PP.bw[1], PP.bo[1], PP.k[1], PP.Populations.networks[1]]
     
     rj_burn = RegularJump(asf_model_burn_multi, regular_c, eqs*NG)
     prob_burn = DiscreteProblem(S0,tspan,params)
@@ -225,12 +229,11 @@ function burn_m3_full(sim,S0, PP)
     return S1
 end
 
-
 function burn_m1m2(sim,U0, PP)
     #Function to run homogeneous burn in!
     ny = 10 #will allow for 10 years spinup time
     tspan = (0.0,ny*365+sim.S_day)
-    params = [PP.μ_p[1],PP.K[1],0,PP.bw[1],PP.bo[1], PP.k[1]] #\simga = 0 allows for faster return to correct K!
+    params = [PP.μ_p[1][1],PP.K[1][1],0,PP.bw[1],PP.bo[1], PP.k[1]] #\simga = 0 allows for faster return to correct K!
      #only need to run on S, so can not use others!
     prob_ode = ODEProblem(asf_model_burn_single, U0, tspan,params)
     sol = solve(prob_ode, saveat = ny*365+sim.S_day,reltol=1e-8)
@@ -253,7 +256,7 @@ end
 function asf_model_burn_multi(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
-    β_b, μ_p, K, σ, θ, g, bw, bo, k  = p 
+    μ_p, K, σ, g, bw, bo, k, pop_con  = p 
     
     u[u.<0] .= 0
     
@@ -261,17 +264,16 @@ function asf_model_burn_multi(out,u,p,t)
     
     p_mag = birth_pulse_vector(t,k,bw,bo)
    
-    Deaths = μ_p.*(σ .+ (1-σ).*sqrt.(u./K))*g#rate
     Births = p_mag.*(σ .* u .+ ((1-σ)) .* sqrt.(abs.(u .* K)))#total! (rate times NP)
    
-    #now stopping boar births
+    #now stopping and transferring boar births
     mask_boar = (K .== 1) .& (u .> 0) #boars with a positive population
     boar_births = p_mag*sum(mask_boar)
     Births[mask_boar] .= 0
     mask_p_s = (u .> 1) .& (K .> 1) #moving it to postive 
     Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
     
-    
+    #now allowing for inter group migration births
     n_empty  = sum(u .== 0 ) 
     n_r = (n_empty/tg)^2
 
@@ -279,7 +281,7 @@ function asf_model_burn_multi(out,u,p,t)
         
         dd = copy(u)
         dd[dd .< 2] .= 0  #Groups with 3 or more pigs can have emigration
-        connected_pops = β_b * dd 
+        connected_pops = pop_con * dd 
         mask_em =  (dd .> 0) #populations that will have emigration
 
         em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
@@ -292,11 +294,10 @@ function asf_model_burn_multi(out,u,p,t)
     end 
    
     out[1:2:end] .= Births
-    out[2:2:end] .= u.*Deaths
+    out[2:2:end] .= u.* μ_p.*(σ .+ (1-σ).*sqrt.(u./K))*g
    
     nothing
 end
-
 
 function asf_model_burn_multi_full(out,u,p,t)
 
@@ -313,13 +314,12 @@ function asf_model_burn_multi_full(out,u,p,t)
 
         S = Vector{UInt8}(u[si:ei]) #population we want!
 
-        K = p.K[si:ei]
+        K = p.K[i]
         
         tg = length(S) #total groups in all populations
         
         p_mag = @. p.k[i]*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
-        Deaths = @. p.μ_p[si:ei]*(0.75 + ((1-0.75))*sqrt(S/K))*p.g[i] #rate
-        Births = @. p_mag*(0.75 * S + ((1-0.75)) * sqrt(S * K))#total! (rate times NP)
+        Births = @. p_mag*(0.75 * S + ((0.25)) * sqrt(S * K))#total! (rate times NP)
 
         #now stopping boar births
         mask_boar = (K .== 1) .& (S .> 0) #boars with a positive population
@@ -332,26 +332,26 @@ function asf_model_burn_multi_full(out,u,p,t)
         
         if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
             
-            n_r = (n_empty/tg)^2 #squared to reduce intesity
-            
-            dd = copy(S)
-            dd[dd .< 2] .= 0
-            connected_pops = p.β_b[si:ei,si:ei] * dd
-            #Groups with 3 or more pigs can have emigration
-            mask_em =  (dd .> 0) #populations that will have emigration
+        connections = shuffle(pop_data.inter_connections[i])
 
-            em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
+        for i in eachrow(connections)
+            g1 = i[1]
+            g2 = i[2]
 
-            mask_im = (S .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
-
-            Births[mask_em] .*= n_r
-            Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
+            if (S[g1] > 2) & (S[g2] == 0) & (Births[g1] > p_mag) #g1 to g2 
+                Births[g1] -= p_mag
+                Births[g2] += p_mag
+            elseif (S[g2] > 2) & (S[g1] == 0) & (Births[g2] > p_mag) #g2 to g1
+                Births[g2] -= p_mag
+                Births[g1] += p_mag
+            end
+        end     
 
         end 
         
       
         out[2*(si-1)+1:2:2*ei] .= Births
-        out[2*(si-1)+2:2:2*ei] .= S .* Deaths
+        out[2*(si-1)+2:2:2*ei] .=  @. S *  p.μ_p[i]*(0.75 + ((0.25))*sqrt(S/K))*p.g[i] #rate
        
     end
 
@@ -363,7 +363,7 @@ function birth_pulse_vector(t,k,s,p)
     return k*exp(-s*cos(pi*(t+p)/365)^2)
 end
 
-function build_s(sim, pops, network, counts, verbose)
+function build_s(sim, pops, counts, verbose)
     #=
     Function to build the initial S population (seed at a later date) 
     =#
@@ -388,7 +388,7 @@ function build_s(sim, pops, network, counts, verbose)
     if MN == 3
         
         for j in 1:n_pops #looping through all populations
-           
+            network = counts.networks[j]
             i = (j-1) ÷ n_p + 1
 
             #population data
@@ -411,7 +411,9 @@ function build_s(sim, pops, network, counts, verbose)
             sow_dist = TruncatedNormal(data.N_f[1],data.N_f[2],min_group_size, max_group_size) #dist for number of pigs in sow feral group
             sow_groups = round.(Int16,rand(sow_dist, N_sow)) #drawing the populations of each feral group in population
         
-            pop_network = copy(network[n_cs[i]+1:n_cs[i+1]-N_farm,n_cs[i]+1:n_cs[i+1]-N_farm]) #isolating network for this feral pop 
+            pop_network = copy(network[1:N_feral,1:N_feral]) #isolating network for this feral pop 
+
+
             pop_network[pop_network .!= 0] .= 1 #seeting all 
             group_degree = vec(sum(Int16, pop_network, dims = 2)) .- 1 #group degree -1 as not counting inta group connections 
 
@@ -468,7 +470,7 @@ function build_s(sim, pops, network, counts, verbose)
 end
 
 
-function find_nodes(Network, N_connections, base)
+function find_nodes(Network, N_connections)
   
     p1g = zeros(Int16,0) #groups we are using
     p1c = zeros(Int16,0) #centre groups that we search for links from (subet of p1g)
@@ -520,7 +522,7 @@ function find_nodes(Network, N_connections, base)
         end
     end
     
-    return p1g .+ base
+    return p1g
 
 end
 

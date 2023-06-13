@@ -5,10 +5,10 @@ module Models
 using LinearAlgebra
 using Distributions
 using SparseArrays
+using Random
 
-export ASF_M3
-export ASF_M3S
-export ASF_M3SL
+export ASF_M3_full
+export ASF_M3_single
 export ASF_M2
 export ASF_M1
 
@@ -144,11 +144,11 @@ function ASF_M3_full(out,u,p,t)
     nothing
 end
 
-
-function ASF_M3S(out,u,p,t)
+function ASF_M3_single(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
-    β_i, β_o, β_b, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, Seasonal, bw, bo, k, la, lo, area, inf_beta,v, nv1,nv2,nv3= p 
+    β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, g, bw, bo, k, la, lo, area, cons, nets = p
+    
     ref_density = 2.8 #baseline density (from Baltics where modelled was fitted)
     year = 365 #days in a year
 
@@ -169,49 +169,67 @@ function ASF_M3S(out,u,p,t)
     tp = sum(Np) # total living pigs
     
     d_eff = sqrt((tp / area) / ref_density) #account for different densities between fitting and current pop
-   
     
-    Lambda =  λ + la * cos((t + lo) * 2*pi/year) #decay
-    p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
+    Lambda = @. λ + la * cos((t + lo) * 2*pi/year) #decay
+    #p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
    
     Deaths = @. μ_p*(σ + ((1-σ))*sqrt(Np./K))*g #rate
-    Births = @. p_mag*(σ * Np + ((1-σ)) * sqrt(Np .* K))#total! (rate times NP)
+    Births = @. 1*(σ * Np + ((1-σ)) * sqrt(Np .* K))#total! (rate times NP)
 
 
     #now stopping boar births
-    mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
-    boar_births = p_mag*sum(mask_boar)
-    Births[mask_boar] .= 0
-    mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive sow groups with at least 2 pigs
-    Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
+    #mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
+    #boar_births = p_mag*sum(mask_boar)
+    #Births[mask_boar] .= 0
+    #mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive sow groups with at least 2 pigs
+    #Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
     
-    n_empty  = sum(Np .== 0 )   
+    #n_empty  = sum(Np .== 0 )   
+     #= 
+     if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
+            
+            n_r = (n_empty/tg)^2 #squared to reduce intesity
+            
+            dd = copy(Np)
+            dd[dd .< 2] .= 0
+            connected_pops = nets * dd
+
+                #Groups with 3 or more pigs can have emigration
+            mask_em =  (dd .> 0) #populations that will have emigration
+
+            em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
+
+            mask_im = (Np .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
+
+            Births[mask_em] .*= n_r
+            Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
+
+     end 
+      =#
     
-    if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
-        
-        n_r = (n_empty/tg)^2 #squared to reduce intesity
-        
-        dd = copy(Np)
-        dd[dd .< 2] .= 0
-        connected_pops = β_b * dd
+    out[3:11:end] .= β_i .* (S ./ Nt) .* (I .+ ω .* C) #intra
+    
+   
+    for con in eachrow(cons) #intra
+        g1 = con[1]
+        g2 = con[2]
 
-            #Groups with 3 or more pigs can have emigration
-        mask_em =  (dd .> 0) #populations that will have emigration
+        if (I[g1]+I[g2]+C[g1]+C[g2]) > 0 #INFECTIONS Can Occur!
+            
+            NTT = Nt[g1] + Nt[g2]
+    
+            #Pop 2 to 1
+            out[11*(g1-1)+3] += d_eff * S[g1] * β_o[g1] * ( I[g2] + ω[g2] * C[g2]) / NTT
+            
+            #Pop 1 to 2
+            out[11*(g2-1)+3] += d_eff * S[g2] * β_o[g2] * ( I[g1] + ω[g1] * C[g1]) / NTT
 
-        em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
-
-        mask_im = (Np .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
-
-        Births[mask_em] .*= n_r
-        Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
-
-    end 
-  
-    nv3 .= (matmul!(nv1,v,Nt') .+ matmul!(nv2,reshape(Nt, length(Nt), 1),v')) #calcutlating the populations for combined groups
+        end
+       
+    end
     
      out[1:11:end] .= Births
      out[2:11:end] .= @. S*Deaths
-     out[3:11:end] .= matmul!(inf_beta,((d_eff.*β_o.*S)./nv3),(I.+ω.*C)) .+ β_i .* (S ./ Nt) .* (I .+ ω .* C)
      out[4:11:end] .= @. E*Deaths
      out[5:11:end] .= @. ζ*E
      out[6:11:end] .= @. ρ*γ*I 
@@ -223,9 +241,6 @@ function ASF_M3S(out,u,p,t)
    
     nothing
 end
-
-
-
 
 function ASF_M2(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!

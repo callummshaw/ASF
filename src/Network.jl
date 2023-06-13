@@ -25,13 +25,16 @@ mutable struct Network_Data
     density::Vector{Float32}
     area::Vector{Float32}
 
-    connections::Matrix{Int16}
-    function Network_Data(feral,farm, inf, density,area)
+    inter_connections::Vector{Matrix{Int16}}
+    pop_connections::Matrix{Int16}
+    
+    networks::Vector{Matrix{Int16}}
+    function Network_Data(feral,farm, inf, density,area, inter_con, networks)
         n = size(feral)[1]
         t = feral + farm
         cs = pushfirst!(cumsum(t),0)
-        
-        new(feral,farm,n,t,cs, inf, density, area,zeros(Int16,2,2))
+
+        new(feral,farm,n,t,cs, inf, density, area,inter_con,zeros(Int16,2,2), networks)
     end
 end 
 
@@ -43,10 +46,10 @@ function build(sim, pops, verbose, pop_net)
     n_p = sim.N_Pop # number of populations per region
     n_r = size(pops)[1] #number of regions
     n_pops = n_p*n_r #total number of populations
-    network = Vector{Matrix{Int16}}(undef, n_pops) #vector to store all the 
+    network = Vector{Matrix{Int16}}(undef, n_pops) #vector to store all the connection matrices
+    network_con = Vector{Matrix{Int16}}(undef, n_pops)
     feral_pops = Vector{Int16}(undef, n_pops)
     farm_pops = Vector{Int16}(undef, n_pops)
-
     if sim.Model == 3 #model 3 so need to generate network!
         for pop in 1:n_pops #looping through all N populations
             
@@ -119,10 +122,8 @@ function build(sim, pops, verbose, pop_net)
                     feral = erdos_renyi(nf,p_c) #not all groups are connected to every other
                 end
             end
-            
-
-            network_feral = Matrix(adjacency_matrix(feral))*200 #inter feral = 200
-            network_feral[diagind(network_feral)] .= 100 #intra feral = 100
+        
+            network_feral = Matrix(adjacency_matrix(feral))
 
             if nl != 0  #there are farm populations 
                 
@@ -134,17 +135,24 @@ function build(sim, pops, verbose, pop_net)
 
                 for i in nf+1:N
                     feral_pop = rand(1:nf) # the feral population the farm can interact within
-                    network_combined[i,i] = 400 #transmission within farm pop = 400
+                    network_combined[i,i] = 1 
 
-                    network_combined[i,feral_pop] = 300 #feral-farm = 300
-                    network_combined[feral_pop, i] = 300 #feral-farm = 300
+                    network_combined[i,feral_pop] = 1 
+                    network_combined[feral_pop, i] = 1 
 
                 end
-            
+                
+                ncu = UpperTriangular(network_combined)
+                nc = getindex.(findall(>(0),ncu), [1 2])
+
                 network[pop] = network_combined
+                network_con[pop] = nc  
 
             else #no farms in this population
                 network[pop] = network_feral
+                ncu = UpperTriangular(network_feral)
+                nc = getindex.(findall(>(0),ncu), [1 2])
+                network_con[pop] = nc
             end
             
         end
@@ -153,19 +161,16 @@ function build(sim, pops, verbose, pop_net)
         feral_pops[1] = 1 #only 1 large group!
         farm_pops[1] = 0 #no farms(yet...)
         network[1] = [1][:,:]
-        
+        network_con[1] = zeros(2,2)
     end
     
-    counts = Network_Data(feral_pops,farm_pops, sim.N_Seed,[0.0],[0.0])
+    counts = Network_Data(feral_pops,farm_pops, sim.N_Seed,[0.0],[0.0], network_con, network)
 
-    if (n_pops > 1) & (sim.Model == 3) #model 3 with more than 1 population!
-        combined_network, Nodes = combine_networks(network,sim,counts,pop_net, verbose)
-        counts.connections = Nodes
-    else
-        combined_network = network[1] #no need to combine!
+    if (n_pops > 1) & (sim.Model == 3) #model 3 with more than 1 population! Therefore need to connect!
+        counts.pop_connections = combine_networks(network,sim,counts,pop_net, verbose) #connections between networks
     end
 
-    return combined_network, counts
+    return counts
 
 end
 
@@ -175,8 +180,6 @@ function combine_networks(network,sim, counts, pop_net,verbose)
     N_connections = sim.N_Con #number of connecting groups between populations
     n_pops = counts.pop
     n_cs = counts.cum_sum
-    N = n_cs[end]
-    meta_network = zeros(N,N)
 
     if pop_net isa Int64
         if verbose
@@ -187,12 +190,7 @@ function combine_networks(network,sim, counts, pop_net,verbose)
         pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(pop_net))) #matrix of our meta-population network
     end
   
-    #combine all networks into one large "meta" network, note still no links between individual networks.
-    for i in 1:n_pops #looping through populations
-        meta_network[n_cs[i]+1:n_cs[i+1],n_cs[i]+1:n_cs[i+1]] = network[i] # the  network
-    end
     #now we need to connect all the networks with each other!
-    
     if size(pop_matrix)[1] != n_pops
         @warn "Population level network and number of populations generated from input do not match, defaulting to line!"
         pop_matrix =  UpperTriangular(Matrix(adjacency_matrix(path_graph(n_pops))))
@@ -225,13 +223,6 @@ function combine_networks(network,sim, counts, pop_net,verbose)
 
         append!(S1P,repeat([p1],length(N1_nodes)))
         append!(S2P,repeat([p2],length(N1_nodes)))
-        for (j,v1) in enumerate(N1_nodes)
-            v2 = N2_nodes[j]
-
-            meta_network[v1,v2] = 200
-            meta_network[v2,v1] = 200
-
-        end
     end 
 
     SS_Nodes = zeros(Int16,length(S1),4)
@@ -240,7 +231,7 @@ function combine_networks(network,sim, counts, pop_net,verbose)
     SS_Nodes[:,3] = S1P
     SS_Nodes[:,4] = S2P
 
-    return meta_network, SS_Nodes
+    return SS_Nodes
 
 end
 

@@ -8,6 +8,7 @@ using Graphs
 using QuadGK
 using CSV
 using DataFrames
+using Random
 
 include("Population.jl")
 include("Beta.jl")
@@ -57,8 +58,10 @@ struct Meta_Data <: Data_Input
         if verbose
             if Mn == 1
                 @info "ODE Model"
+                Np = 1
             elseif Mn == 2
                 @info "Tau Leaping Homogeneous Model"
+                Np = 1
             elseif Mn == 3
                 @info "Tau Leaping Heterogeneous Model"
                 
@@ -275,20 +278,18 @@ mutable struct Model_Parameters
     Structure to store key parameters
     =#
     
-    β::Matrix{Float32} #transmission matrix for inter_pop
-    β_i::Vector{Float32} #transmission for inter
-    β_b::Matrix{Int16} #what feral groups are linked to each other, for births
-    β_p::Vector{Float32} #used to interpopulation trans
+    β_o::Vector{Vector{Float32}} #transmission matrix for inter_pop
+    β_i::Vector{Vector{Float32}} #transmission matrix for inter_pop
 
-    μ_p::Vector{Float32} #birth/death rate at K
-    K::Vector{Int16} #carrying capicity
+    μ_p::Vector{Vector{Float32}} #birth/death rate at K
+    K::Vector{Vector{Int16}} #carrying capicity
    
-    ζ::Vector{Float32} #latent rate
-    γ::Vector{Float32} #recovery rate
-    ω::Vector{Float32} #corpse infection modifier
-    ρ::Vector{Float32} #death probability
-    λ::Vector{Float32} #corpse decay rate
-    κ::Vector{Float32} #loss of immunity rate
+    ζ::Vector{Vector{Float32}} #latent rate
+    γ::Vector{Vector{Float32}} #recovery rate
+    ω::Vector{Vector{Float32}} #corpse infection modifier
+    ρ::Vector{Vector{Float32}} #death probability
+    λ::Vector{Vector{Float32}} #corpse decay rate
+    κ::Vector{Vector{Float32}} #loss of immunity rate
     
     σ::Vector{Float32} #density split
     θ::Vector{Float32} #density power for births/deaths
@@ -303,17 +304,15 @@ mutable struct Model_Parameters
     lo::Vector{UInt16}
 
     Populations::Network.Network_Data #breakdown of population
-    
-    Dummy_N::Vector{Matrix{UInt8}}
-    Dummy_B::Vector{Float32}
+   
 
-    function Model_Parameters(sim, pops, sea, U0, Populations, network)
+    function Model_Parameters(sim, pops, sea, U0, Populations)
         
-        β, βi,connected_pops, beta_pop = Beta.construction(sim, pops, Populations, network)
+        β_o, β_i = Beta.construction(sim, pops, Populations)
+
         μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations)
-        dummy = [zeros(UInt8, Populations.cum_sum[2], Populations.cum_sum[2]),zeros(Int16, Populations.cum_sum[2], Populations.cum_sum[2]),zeros(Int16, Populations.cum_sum[2], Populations.cum_sum[2])]
-        dummyb = zeros(Float32, Populations.cum_sum[2])
-        new(β, βi, connected_pops, beta_pop, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations, dummy, dummyb)
+
+        new(β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
     end
     
 end
@@ -327,7 +326,7 @@ struct Model_Data
     NR::Int64 #number of runs in ensemble!
     U0::Vector{Int32} #Initial Population
     Parameters::Model_Parameters #Model parameters
-    Populations_data::Vector{Population_Data} #distributions for params
+    #Populations_data::Vector{Population_Data} #distributions for params
 
     function Model_Data(Path; pop_net= 0, verbose = false)
         #custom_network parameter used for fitting!
@@ -336,22 +335,21 @@ struct Model_Data
         Time = (sim.S_day,sim.years*365+sim.S_day)
 
         #now building feral pig network
-        network, counts = Network.build(sim, pops, verbose, pop_net) 
+        counts = Network.build(sim, pops, verbose, pop_net) 
         
         #Now using network to build init pops
-        S0 = Population.build_s(sim, pops, network, counts, verbose) #initial populations
+        S0 = Population.build_s(sim, pops, counts, verbose) #initial populations
      
-        Parameters = Model_Parameters(sim, pops, sea, S0, counts, network)
+        Parameters = Model_Parameters(sim, pops, sea, S0, counts)
         
-        U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, counts, verbose) #burn in pop to desired start day and seed desired ASF!
-        
-        new(sim.Model,Time, sim.N_ensemble, U0, Parameters, pops)
+        U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
+        new(sim.Model,Time, sim.N_ensemble, U0, Parameters)
         
     end
     
 end
 
-
+undef
 function day_to_rate(Mean, STD)
     #simple conversion to switch between time and rate
     mean_rate = 1/Mean
@@ -365,23 +363,24 @@ function parameter_build(sim, pops, sea, init_pops, counts)
     Function that builds most parameters for model
     =#
     
-    K = init_pops #carrying capacity of each group
+   
     
     n_p = sim.N_Pop # number of populations per region
     n_r = size(pops)[1] #number of regions
     n_pops = n_p*n_r #total number of populations
 
-    # All other params
-    n_groups = length(K)
-    ζ = Vector{Float32}(undef, n_groups) #latent rate
-    γ = Vector{Float32}(undef, n_groups) #recovery/death rate
-    μ_p = Vector{Float32}(undef, n_groups) #births/death rate at K
+    #Group different params
+    K = Vector{Vector{Int16}}(undef,n_pops)
+    ζ = Vector{Vector{Float32}}(undef,n_pops) #latent rate
+    γ = Vector{Vector{Float32}}(undef,n_pops) #recovery/death rate
+    μ_p = Vector{Vector{Float32}}(undef,n_pops) #births/death rate at K
     
-    ω = Vector{Float32}(undef, n_groups) #corpse infection modifier
-    ρ = Vector{Float32}(undef, n_groups) #ASF mortality
-    λ = Vector{Float32}(undef, n_groups) #corpse decay rate
-    κ = Vector{Float32}(undef, n_groups) #waning immunity rate
+    ω = Vector{Vector{Float32}}(undef,n_pops) #corpse infection modifier
+    ρ = Vector{Vector{Float32}}(undef,n_pops) #ASF mortality
+    λ = Vector{Vector{Float32}}(undef,n_pops) #corpse decay rate
+    κ = Vector{Vector{Float32}}(undef,n_pops) #waning immunity rate
 
+    #pop different params
     σ = Vector{Float32}(undef, n_pops) #density to non-density split for births and deaths
     θ = Vector{Float32}(undef, n_pops) #power of density effects for births/deaths 
     g = Vector{Float32}(undef, n_pops) #factor to allow for stable K with stochastic effects
@@ -410,18 +409,18 @@ function parameter_build(sim, pops, sea, init_pops, counts)
         θ[i] = data.Density_power[1]
         g[i] = data.g_fit[1]
 
-
+        K[i] = init_pops[cs[i]+1:cs[i+1]]
         if sim.Identical#if running off means
 
-            ζ[cs[i]+1:cs[i+1]] .= data.Latent[1]
-            γ[cs[i]+1:cs[i+1]] .= data.Recovery[1]
-            ρ[cs[i]+1:cs[i+1]] .= data.Death[1]
-            κ[cs[i]+1:cs[i+1]] .= data.Immunity[1]
-            λ[cs[i]+1:cs[i]+nf] .= data.Decay_f[1]
-            λ[cs[i]+nf+1:cs[i+1]] .= data.Decay_l[1]
+            ζ[i] = repeat([data.Latent[1]], nt)
+            γ[i] = repeat([data.Recovery[1]], nt)
+            ρ[i] = repeat([data.Death[1]], nt)
+            κ[i] = repeat([data.Immunity[1]], nt)
+            λ[i] = append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
             
             birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-data.LM[1])/365
-            μ_p[cs[i]+1:cs[i+1]] .= birth_rate
+
+            μ_p[i] = repeat([birth_rate], nt)
 
         else #running of distros
             
@@ -436,26 +435,24 @@ function parameter_build(sim, pops, sea, init_pops, counts)
             LS_d = TruncatedNormal(data.LS[1], data.LS[2], 1, 20) #litter size
             LM_d = TruncatedNormal(data.LM[1], data.LM[2], 1, 20) #litter mortality rate
             
-            ζ[cs[i]+1:cs[i+1]] = rand(ζ_d,nt)
-            γ[cs[i]+1:cs[i+1]] = rand(γ_d,nt)
-            ω[cs[i]+1:cs[i+1]] = rand(ω_d,nt)
-            ρ[cs[i]+1:cs[i+1]] = rand(ρ_d,nt)
-            κ[cs[i]+1:cs[i+1]] = rand(κ_d,nt)
-            λ[cs[i]+1:cs[i]+nf] .= rand(λ_fd,nf)
-            λ[cs[i]+nf+1:cs[i+1]] .= rand(λ_ld,nl)
-
+            ζ[i] = rand(ζ_d,nt)
+            γ[i] = rand(γ_d,nt)
             
-            μ_p[cs[i]+1:cs[i+1]] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) ./ 365
+            ρ[i] = rand(ρ_d,nt)
+            κ[i] = rand(κ_d,nt)
+            λ[i] = append!(rand(λ_fd,nf),rand(λ_ld,nl))
+
+            μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) ./ 365
             
         end
 
 
         if !sim.Fitted
             if sim.Identical
-                ω[cs[i]+1:cs[i+1]] .= data.Corpse[1]
+                ω[i] = repeat([data.Corpse[1]],nt)
             else
                 ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2], 0, 1) #corpse inf dist
-                ω[cs[i]+1:cs[i+1]] = rand(ω_d,nt)
+                ω[i] = rand(ω_d,nt)
             end
         else #running off fitted!
             if sim.Model == 3
@@ -472,10 +469,14 @@ function parameter_build(sim, pops, sea, init_pops, counts)
                 path = "Inputs/Fitted_Params/ODE/omega.csv"
             end 
 
-            rand_values = rand(1:10000,1)
-            df_omega = Array(CSV.read(path, DataFrame, header=false))
-            omega  = df_omega[rand_values[1]]
-            ω[cs[i]+1:cs[i+1]] .= omega
+            df_omega = shuffle(Array(CSV.read(path, DataFrame, header=false)))
+
+            if sim.Identical
+                ω[i] = repeat([df_omega[1]], nt)
+            else
+                ω[i] = df_omega[1:nt]
+            end
+
         end
 
         if sim.Seasonal
@@ -485,7 +486,7 @@ function parameter_build(sim, pops, sea, init_pops, counts)
             la[i] = data_s.Decay_amp
             lo[i] = data_s.Decay_offset
 
-            k[i]  = birthpulse_norm(data_s.Birth_width, mean(μ_p[cs[i]+1:cs[i+1]]))
+            k[i]  = birthpulse_norm(data_s.Birth_width, mean(μ_p[i]))
 
         else
 

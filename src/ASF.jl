@@ -21,10 +21,11 @@ include("Models.jl") #where all the models are!
 include("Input.jl") #the input
 include("Analyse.jl") #some simple analysis
 
-function Model(input_path,out, st)
+function Model(input_path,out)
     #wrapper function to run ASF models!
 
     i1 = Input.Model_Data(input_path, verbose = true)
+   
     n_sims  = i1.NR
     n_time  = i1.Time
     n_group = i1.Parameters.Populations.total[1]
@@ -108,15 +109,15 @@ function Model(input_path,out, st)
                 
             elseif (MN == 3) & (input.Parameters.Populations.pop == 1) #M3 with one pop!
                 
-                params = convert_heterogeneous(input.Parameters) #converting params to single array!
-                params[10] *= sn[c]
                 
-                rj = RegularJump(Models.ASF_M3S, regular_c, eqs*nt)
+                params = convert_heterogeneous(input.Parameters) #converting params to single array!
+                
+                rj = RegularJump(Models.ASF_M3_single, regular_c, eqs*nt)
                 U0 = convert(Vector{Int8}, input.U0)
                 prob = DiscreteProblem(U0,input.Time, params)#hetero_single_test(input.Parameters))
                 jump_prob = JumpProblem(prob,Direct(),rj)
                 sol = solve(jump_prob, SimpleTauLeaping(), dt =1)
-
+                
             else #M3 with multipopulations!
             
                 rj = RegularJump(Models.ASF_M3_full, regular_c, eqs*nt)
@@ -278,7 +279,6 @@ function Model_sim(input_path,out, br, dr)
     return sum(output .== 9999)
 end
 
-
 function birthpulse_norm(s, DT)
    
     integral, err = quadgk(x -> exp(-s*cos(pi*x/365)^2), 1, 365, rtol=1e-8);
@@ -287,23 +287,19 @@ function birthpulse_norm(s, DT)
     return k
 end
 
-
-
-
-
 function convert_homogeneous(input)
     #Function to convert input structure to simple array for M1 and M2
     params = Vector{Any}(undef,18)
 
-    params[1]  = input.β[1]
-    params[2]  = input.μ_p[1]
-    params[3]  = input.K[1]
-    params[4]  = input.ζ[1]
-    params[5]  = input.γ[1]
-    params[6]  = input.ω[1]
-    params[7]  = input.ρ[1]
-    params[8]  = input.λ[1]
-    params[9]  = input.κ[1]
+    params[1]  = input.β_o[1][1]
+    params[2]  = input.μ_p[1][1]
+    params[3]  = input.K[1][1]
+    params[4]  = input.ζ[1][1]
+    params[5]  = input.γ[1][1]
+    params[6]  = input.ω[1][1]
+    params[7]  = input.ρ[1][1]
+    params[8]  = input.λ[1][1]
+    params[9]  = input.κ[1][1]
     
     params[10] = input.σ[1]
     params[11] = input.θ[1]
@@ -318,50 +314,36 @@ function convert_homogeneous(input)
     return params
 end
     
-  
-
-
 function convert_heterogeneous(input)
     
-    params =  Vector{Any}(undef,26)
-    beta = input.β
-    beta_con = input.β_b
-    n_g = size(input.K)[1]
-    params[1]  = input.β_i
-    params[2]  = beta
-    params[3]  = beta_con
+    params =  Vector{Any}(undef,20)
     
-    params[4]  = input.μ_p[1]
-    params[5]  = input.K
-    params[6]  = input.ζ[1]
-    params[7]  = input.γ[1]
-    params[8]  = input.ω[1]
-    params[9] = input.ρ[1]
-    params[10] = input.λ[1]
-    params[11] = input.κ[1]
+    params[1]  = input.β_o[1] #inter
+    params[2]  = input.β_i[1] #intra
     
-    params[12] = input.σ[1]
-    params[13] = input.θ[1]
-    params[14] = input.g[1]
+    params[3]  = input.μ_p[1]
+    params[4]  = input.K[1]
+    params[5]  = input.ζ[1]
+    params[6]  = input.γ[1]
+    params[7]  = input.ω[1]
+    params[8] = input.ρ[1]
+    params[9] = input.λ[1]
+    params[10] = input.κ[1]
+    
+    params[11] = input.σ[1]
+    params[12] = input.g[1]
 
-    params[15] = input.Seasonal
-    params[16] = input.bw[1]
-    params[17] = input.bo[1]
-    params[18] = input.k[1]
-    params[19] = input.la[1]
-    params[20] = input.lo[1]
+    params[13] = input.bw[1]
+    params[14] = input.bo[1]
+    params[15] = input.k[1]
+    params[16] = input.la[1]
+    params[17] = input.lo[1]
     
-    params[21] = input.Populations.area[1]
-    
-    params[22] = zeros(Float32,n_g)
-    params[23] = ones(UInt8,n_g,1)
-    params[24] = ones(UInt8,n_g,n_g)
-    params[25] = ones(UInt8,n_g,n_g)
-    params[26] = ones(UInt8,n_g,n_g)
+    params[18] = input.Populations.area[1]
+    params[19] = input.Populations.inter_connections[1]
+    params[20] = input.Populations.networks[1]
     
     return params
 end
 
-
-
-end
+end  
