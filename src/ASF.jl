@@ -67,8 +67,11 @@ function Model(input_path,out)
             nc = 5 #number of classes (SEIRC)
             eqs = 11 #number of processes
 
+            if nt > 5000
+                @warn "Transition matrix too large, reduce group numbers"
+            end
             #Matrix of all the transitions between classes for Gillespie model
-            dc = sparse(zeros(nt*nc,nt*eqs))
+            dc = sparse(zeros(Float32,nt*nc,nt*eqs))
 
             dc[0*nc*nt+1:nc*nt*eqs+nc:end] .= 1
             dc[1*nc*nt+1:nc*nt*eqs+nc:end] .= -1
@@ -316,7 +319,7 @@ end
     
 function convert_heterogeneous(input)
     
-    params =  Vector{Any}(undef,20)
+    params =  Vector{Any}(undef,22)
     
     params[1]  = input.β_o[1] #inter
     params[2]  = input.β_i[1] #intra
@@ -343,6 +346,9 @@ function convert_heterogeneous(input)
     params[19] = input.Populations.inter_connections[1]
     params[20] = input.Populations.networks[1]
     
+    params[21] = ones(Int16, length(input.K[1]))
+    params[22] = ones(Int16, length(input.K[1]))
+            
     return params
 end
 

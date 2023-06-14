@@ -497,9 +497,6 @@ function find_nodes(Network, N_connections)
                 non_central_groups = setdiff(p1g,p1c)
                 if isempty(non_central_groups)
                     @warn "No Groups left to choose, will try again"
-                    println(N_connections)
-                    println(length(p1g))
-                    println(length(p1c))
                     return 0
                 end
                 new_central = rand(non_central_groups)

@@ -42,7 +42,7 @@ function ASF_M3_full(out,u,p,t)
 
         Nt[Nt .== 0] .= 1
 
-        K = p.K[si:ei]
+        K = p.K[i]
 
         tg = length(Np) #total groups in all populations
         tp = sum(Np) # total living pigs
@@ -51,7 +51,7 @@ function ASF_M3_full(out,u,p,t)
         deff_s[i] = d_eff
        
         p_mag = @. p.k[i]*exp(-p.bw[i]*cos.(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
-        Deaths = @. p.μ_p[si:ei]*(0.75 + ((1-0.75))*sqrt(Np/K))*p.g[i] #rate
+        Deaths = @. p.μ_p[i]*(0.75 + ((1-0.75))*sqrt(Np/K))*p.g[i] #rate
         Births = @. p_mag*(0.75 * Np + ((1-0.75)) * sqrt(Np * K))#total! (rate times NP)
 
         #now stopping boar births
@@ -69,7 +69,7 @@ function ASF_M3_full(out,u,p,t)
             
             dd = copy(Np)
             dd[dd .< 2] .= 0
-            connected_pops = p.β_b[si:ei,si:ei] * dd
+            connected_pops = pop_data.networks[i] * dd
 
                 #Groups with 3 or more pigs can have emigration
             mask_em =  (dd .> 0) #populations that will have emigration
@@ -95,31 +95,40 @@ function ASF_M3_full(out,u,p,t)
             out[11*s0+8:11:11*ei] .= 0
             out[11*s0+9:11:11*ei] .= @. R*Deaths
             out[11*s0+10:11:11*ei].= 0
-            out[11*s0+11:11:11*ei].= @. p.κ[si:ei]*R 
+            out[11*s0+11:11:11*ei].= @. p.κ[i]*R 
         else
-            v = ones(UInt8, length(Nt))
             
-            p.Dummy_N[3] .= matmul!(p.Dummy_N[1],reshape(v, length(v), 1),Nt') .+ matmul!(p.Dummy_N[2],reshape(Nt, length(Nt), 1),v')
-            
-            Lambda = @. p.λ[si:ei] + p.la[i] * cos((t + p.lo[i]) * 2*pi/year) #decay
+            Lambda = @. p.λ[i] + p.la[i] * cos((t + p.lo[i]) * 2*pi/year) #decay
             out[11*s0+1:11:11*ei] .= Births
             out[11*s0+2:11:11*ei] .= @. S*Deaths
-            out[11*s0+3:11:11*ei] .= matmul!(p.Dummy_B,(d_eff.*p.β[si:ei,si:ei].*S./ p.Dummy_N[3]),(I.+p.ω[si:ei].*C))+p.β_i[si:ei].*S./Nt .* (I.+p.ω[si:ei].*C) #d_eff.*p.β[si:ei,si:ei].*S./p.Dummy_N[3] * (I.+p.ω[si:ei].*C) 
+            out[11*s0+3:11:11*ei] .= p.β_i[i] .* (S ./ Nt) .* (I .+ p.ω[i] .* C) #intra
             out[11*s0+4:11:11*ei] .= @. E*Deaths
-            out[11*s0+5:11:11*ei] .= @. p.ζ[si:ei] *E
-            out[11*s0+6:11:11*ei] .= @. p.ρ[si:ei]*p.γ[si:ei]*I 
+            out[11*s0+5:11:11*ei] .= @. p.ζ[i] *E
+            out[11*s0+6:11:11*ei] .= @. p.ρ[i]*p.γ[i]*I 
             out[11*s0+7:11:11*ei] .= @. I*Deaths
-            out[11*s0+8:11:11*ei] .= @. p.γ[si:ei]*(1-p.ρ[si:ei])*I
+            out[11*s0+8:11:11*ei] .= @. p.γ[i]*(1-p.ρ[i])*I
             out[11*s0+9:11:11*ei] .= @. R*Deaths
             out[11*s0+10:11:11*ei].= @. (1/Lambda)*C
-            out[11*s0+11:11:11*ei].= @. p.κ[si:ei]*R 
-        end
-        
+            out[11*s0+11:11:11*ei].= @. p.κ[i]*R 
+            
+            for con in eachrow(pop_data.inter_connections[i]) #intra
+                g1 = con[1]
+                g2 = con[2]
 
+                NTT = Nt[g1] + Nt[g2]
+
+                #Pop 2 to 1
+                out[11*(s0+g1-1)+3] += d_eff * S[g1] * p.β_o[i][g1] * ( I[g2] + p.ω[i][g2] * C[g2]) / NTT
+
+                #Pop 1 to 2
+                out[11*(s0+g2-1)+3] += d_eff * S[g2] * p.β_o[i][g2] * ( I[g1] + p.ω[i][g1] * C[g1]) / NTT
+
+            end
+        end
     end 
 
     #now we need to handle the between population transmission!
-    for con in eachrow(pop_data.connections) #looping through all inter population connections
+    for con in eachrow(pop_data.pop_connections) #looping through all inter population connections
         g1 = con[1]
         g2 = con[2]
         
@@ -127,16 +136,19 @@ function ASF_M3_full(out,u,p,t)
         p2 = con[4]
 
         dm = (deff_s[p1] + deff_s[p2])/2 
-        β = (p.β_p[p1]+p.β_p[p2])/2
+        β = (p.β_o[p1][g1]+p.β_o[p2][g2])/2
 
-        if (u[5*(g1-1)+3] + u[5*(g1-1)+5] + u[5*(g2-1)+3] + u[5*(g2-1)+5]) > 0 #INFECTIONS Can Occur!
-            NTT = sum(u[5*(g1-1)+1:5*(g1-1)+5]) + sum(u[5*(g2-1)+1:5*(g2-1)+5])
+        s01 = pop_data.cum_sum[p1]
+        s02 = pop_data.cum_sum[p2]
+        
+        if (u[5*(g1+s01-1)+3] + u[5*(g1+s01-1)+5] + u[5*(g2+s02-1)+3] + u[5*(g2+s02-1)+5]) > 0 #INFECTIONS Can Occur!
+            NTT = sum(u[5*(g1+s01-1)+1:5*(g1+s01-1)+5]) + sum(u[5*(g2+s02-1)+1:5*(g2+s02-1)+5])
             
             #Pop 2 to 1
-            out[11*(g1-1)+3] += dm * u[5*(g1-1)+1] * β * ( u[5*(g2-1)+3] + p.ω[g2] * u[5*(g2-1)+5]) / NTT
+            out[11*(g1+s01-1)+3] += dm * u[5*(g1+s01-1)+1] * β * ( u[5*(g2+s02-1)+3] + p.ω[p2][g2] * u[5*(g2+s02-1)+5]) / NTT
             
             #Pop 1 to 2
-            out[11*(g2-1)+3] += dm * u[5*(g2-1)+1] * β * ( u[5*(g1-1)+3] + p.ω[g1] * u[5*(g1-1)+5]) / NTT
+            out[11*(g2+s02-1)+3] += dm * u[5*(g2+s02-1)+1] * β * ( u[5*(g1+s01-1)+3] + p.ω[p1][g1] * u[5*(g1+s01-1)+5]) / NTT
             
         end
     end
@@ -147,7 +159,7 @@ end
 function ASF_M3_single(out,u,p,t)
     #ASF model for a single population (can make some speed increases) without farms!
 
-    β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, g, bw, bo, k, la, lo, area, cons, nets = p
+    β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, g, bw, bo, k, la, lo, area, cons, nets, t1, t2 = p
     
     ref_density = 2.8 #baseline density (from Baltics where modelled was fitted)
     year = 365 #days in a year
@@ -171,41 +183,41 @@ function ASF_M3_single(out,u,p,t)
     d_eff = sqrt((tp / area) / ref_density) #account for different densities between fitting and current pop
     
     Lambda = @. λ + la * cos((t + lo) * 2*pi/year) #decay
-    #p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
+    p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
    
     Deaths = @. μ_p*(σ + ((1-σ))*sqrt(Np./K))*g #rate
-    Births = @. 1*(σ * Np + ((1-σ)) * sqrt(Np .* K))#total! (rate times NP)
+    Births = @. p_mag*(σ * Np + ((1-σ)) * sqrt(Np .* K))#total! (rate times NP)
 
 
     #now stopping boar births
-    #mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
-    #boar_births = p_mag*sum(mask_boar)
-    #Births[mask_boar] .= 0
-    #mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive sow groups with at least 2 pigs
-    #Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
+    mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
+    boar_births = p_mag*sum(mask_boar)
+    Births[mask_boar] .= 0
+    mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive sow groups with at least 2 pigs
+    Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
     
-    #n_empty  = sum(Np .== 0 )   
-     #= 
+    n_empty  = sum(Np .== 0 )   
+     
      if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
             
             n_r = (n_empty/tg)^2 #squared to reduce intesity
             
-            dd = copy(Np)
-            dd[dd .< 2] .= 0
-            connected_pops = nets * dd
+            t2 .= copy(Np)
+            t2[t2 .< 2] .= 0
+            t1 .= nets * t2
 
                 #Groups with 3 or more pigs can have emigration
-            mask_em =  (dd .> 0) #populations that will have emigration
+            mask_em =  (t2 .> 0) #populations that will have emigration
 
             em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
 
-            mask_im = (Np .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
+            mask_im = (Np .== 0) .& (t1 .> 1) #population zero but connected groups have 5 or more pigs
 
             Births[mask_em] .*= n_r
             Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
 
      end 
-      =#
+    
     
     out[3:11:end] .= β_i .* (S ./ Nt) .* (I .+ ω .* C) #intra
     

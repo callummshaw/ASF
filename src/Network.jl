@@ -211,9 +211,16 @@ function combine_networks(network,sim, counts, pop_net,verbose)
 
         p1_base = n_cs[p1]
         p2_base = n_cs[p2]
-
-        N1_nodes = find_nodes(network[p1], N_connections, all_nodes, p1_base) #nodes from pop 1 
-        N2_nodes = find_nodes(network[p2], N_connections, all_nodes, p2_base) #nodes from pop 2
+        
+        N1_nodes = 0
+        while N1_nodes == 0      
+            N1_nodes = find_nodes(network[p1], N_connections, all_nodes) #nodes from pop 1 
+        end
+        
+        N2_nodes = 0
+        while N2_nodes == 0
+            N2_nodes = find_nodes(network[p2], N_connections, all_nodes) #nodes from pop 2
+        end
         
         append!(all_nodes,N1_nodes)
         append!(all_nodes,N2_nodes)
@@ -235,14 +242,14 @@ function combine_networks(network,sim, counts, pop_net,verbose)
 
 end
 
-function find_nodes(Network, N_connections, all_nodes, base)
+function find_nodes(Network, N_connections, all_nodes)
         
     p1g = zeros(Int16,0) #groups we are using
     p1c = zeros(Int16,0) #centre groups that we search for links from (subet of p1g)
 
     g_p = rand(1:size(Network)[1]) #base group of p1 that is doing the connecting! now need to find n neighbours
 
-    while g_p + base in all_nodes #making sure starting element is not used in anyother connections
+    while g_p in all_nodes #making sure starting element is not used in anyother connections
         g_p = rand(1:size(Network)[1])
     end 
 
@@ -263,7 +270,10 @@ function find_nodes(Network, N_connections, all_nodes, base)
 
             while N_connections > length(p1g)
                 non_central_groups = setdiff(p1g,p1c)
-
+                if isempty(non_central_groups)
+                    @warn "No Groups left to choose, will try again"
+                    return 0
+                end
                 new_central = rand(non_central_groups)
 
                 append!(p1c,new_central)
@@ -284,7 +294,7 @@ function find_nodes(Network, N_connections, all_nodes, base)
         end
     end
     
-    return shuffle(p1g .+ base)
+    return shuffle(p1g)
 
 end
 
