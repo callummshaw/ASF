@@ -462,10 +462,8 @@ function build_s(sim, pops, counts, verbose)
         areas[1] = total_area
 
     end
-    #updating area and density storage as we have now caluclated them
-    counts.density = densities
-    counts.area = areas
-    return trunc.(Int,s_total)
+
+    return trunc.(Int,s_total), densities, areas
     
 end
 

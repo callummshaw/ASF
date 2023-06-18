@@ -202,7 +202,7 @@ function ASF_M3_single(out,u,p,t)
             
             n_r = (n_empty/tg)^2 #squared to reduce intesity
             
-            t2 .= copy(Np)
+            t2 .= Np
             t2[t2 .< 2] .= 0
             t1 .= nets * t2
 
@@ -221,7 +221,6 @@ function ASF_M3_single(out,u,p,t)
     
     out[3:11:end] .= β_i .* (S ./ Nt) .* (I .+ ω .* C) #intra
     
-   
     for con in eachrow(cons) #intra
         g1 = con[1]
         g2 = con[2]

@@ -9,13 +9,13 @@ Years,5
 #Starting Date (1-365...  where jan 1st = 1 etc.)
 S_Day,0
 #Number of desired runs!
-N_ensemble,100
+N_ensemble,50
 #Param values from means or distribution
 Identical,true
 #Seasonal
 Seasonal,true
 #Network type: random(r) scale-free (s) or small-worlds (w) (model 3 only)
-Network,sw
+Network,w
 #Degree of network (model 3 only)
 N_param,0.2
 #Number of Populations (model 3 only)

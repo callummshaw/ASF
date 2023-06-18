@@ -273,7 +273,7 @@ struct Seasonal_effect
 end
 
 
-mutable struct Model_Parameters
+struct Model_Parameters
     #=
     Structure to store key parameters
     =#
@@ -302,17 +302,20 @@ mutable struct Model_Parameters
     k::Vector{Float32} 
     la::Vector{Float32}
     lo::Vector{UInt16}
+  
+    density::Vector{Float32}
+    area::Vector{Float32}
 
     Populations::Network.Network_Data #breakdown of population
    
 
-    function Model_Parameters(sim, pops, sea, U0, Populations)
+    function Model_Parameters(sim, pops, sea, U0, density, area, Populations,  bm, dm)
         
         β_o, β_i = Beta.construction(sim, pops, Populations)
 
-        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations)
+        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations, bm, dm)
 
-        new(β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, Populations)
+        new(β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, density, area, Populations)
     end
     
 end
@@ -328,7 +331,7 @@ struct Model_Data
     Parameters::Model_Parameters #Model parameters
     #Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path; pop_net= 0, verbose = false)
+    function Model_Data(Path, bm, dm; pop_net= 0, verbose = false)
         #custom_network parameter used for fitting!
         sim, pops, sea = read_inputs(Path, verbose)
 
@@ -338,18 +341,18 @@ struct Model_Data
         counts = Network.build(sim, pops, verbose, pop_net) 
         
         #Now using network to build init pops
-        S0 = Population.build_s(sim, pops, counts, verbose) #initial populations
+        S0, density, area = Population.build_s(sim, pops, counts, verbose) #initial populations
      
-        Parameters = Model_Parameters(sim, pops, sea, S0, counts)
+        Parameters = Model_Parameters(sim, pops, sea, S0, density, area, counts, bm, dm)
         
         U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
-        new(sim.Model,Time, sim.N_ensemble, U0, Parameters)
         
+        new(sim.Model,Time, sim.N_ensemble, U0, Parameters)
     end
     
 end
 
-undef
+
 function day_to_rate(Mean, STD)
     #simple conversion to switch between time and rate
     mean_rate = 1/Mean
@@ -358,7 +361,7 @@ function day_to_rate(Mean, STD)
     return [mean_rate, std_rate]
 end
 
-function parameter_build(sim, pops, sea, init_pops, counts)
+function parameter_build(sim, pops, sea, init_pops, counts, bm, dm)
     #=
     Function that builds most parameters for model
     =#
@@ -416,10 +419,10 @@ function parameter_build(sim, pops, sea, init_pops, counts)
             γ[i] = repeat([data.Recovery[1]], nt)
             ρ[i] = repeat([data.Death[1]], nt)
             κ[i] = repeat([data.Immunity[1]], nt)
-            λ[i] = append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
+            λ[i] = dm .* append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
             
-            birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-data.LM[1])/365
-
+            #birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-data.LM[1])/365
+            birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-bm)/365
             μ_p[i] = repeat([birth_rate], nt)
 
         else #running of distros
@@ -440,10 +443,10 @@ function parameter_build(sim, pops, sea, init_pops, counts)
             
             ρ[i] = rand(ρ_d,nt)
             κ[i] = rand(κ_d,nt)
-            λ[i] = append!(rand(λ_fd,nf),rand(λ_ld,nl))
+            λ[i] = dm .* append!(rand(λ_fd,nf),rand(λ_ld,nl))
 
-            μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) ./ 365
-            
+            #μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) ./ 365
+            μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- bm) ./ 365
         end
 
 
@@ -483,7 +486,7 @@ function parameter_build(sim, pops, sea, init_pops, counts)
 
             bw[i] = data_s.Birth_width
             bo[i] = data_s.Birth_offset
-            la[i] = data_s.Decay_amp
+            la[i] = dm .* data_s.Decay_amp
             lo[i] = data_s.Decay_offset
 
             k[i]  = birthpulse_norm(data_s.Birth_width, mean(μ_p[i]))

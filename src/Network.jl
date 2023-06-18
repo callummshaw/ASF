@@ -10,7 +10,7 @@ export build
 export Network_Data
 
 
-mutable struct Network_Data
+struct Network_Data
     #=
     Structure to store key data on each population, internal just to keep track of a few params
     =#
@@ -21,20 +21,18 @@ mutable struct Network_Data
     cum_sum::Vector{Int16}
     
     inf::Int8
-    
-    density::Vector{Float32}
-    area::Vector{Float32}
 
     inter_connections::Vector{Matrix{Int16}}
     pop_connections::Matrix{Int16}
     
     networks::Vector{Matrix{Int16}}
-    function Network_Data(feral,farm, inf, density,area, inter_con, networks)
+
+    function Network_Data(feral,farm, inf, inter_con, pop_connections, networks)
         n = size(feral)[1]
         t = feral + farm
         cs = pushfirst!(cumsum(t),0)
 
-        new(feral,farm,n,t,cs, inf, density, area,inter_con,zeros(Int16,2,2), networks)
+        new(feral,farm,n,t,cs, inf, inter_con, pop_connections, networks)
     end
 end 
 
@@ -164,23 +162,23 @@ function build(sim, pops, verbose, pop_net)
         network_con[1] = zeros(2,2)
     end
     
-    counts = Network_Data(feral_pops,farm_pops, sim.N_Seed,[0.0],[0.0], network_con, network)
-
     if (n_pops > 1) & (sim.Model == 3) #model 3 with more than 1 population! Therefore need to connect!
-        counts.pop_connections = combine_networks(network,sim,counts,pop_net, verbose) #connections between networks
+        connections = combine_networks(network,sim,n_pops,pop_net, verbose) #connections between networks
+    else
+        connections = zeros(Int16,2,2)
     end
 
+    counts = Network_Data(feral_pops,farm_pops, sim.N_Seed, network_con, connections, network)
+    
     return counts
 
 end
 
-function combine_networks(network,sim, counts, pop_net,verbose)
+function combine_networks(network,sim, n_pops, pop_net,verbose)
     #we have generated all the networks, but they need to be combined!
 
     N_connections = sim.N_Con #number of connecting groups between populations
-    n_pops = counts.pop
-    n_cs = counts.cum_sum
-
+   
     if pop_net isa Int64
         if verbose
             @warn "Must input network structure, defaulting to line!"
@@ -209,9 +207,6 @@ function combine_networks(network,sim, counts, pop_net,verbose)
         p1 = i[1]
         p2 = i[2]
 
-        p1_base = n_cs[p1]
-        p2_base = n_cs[p2]
-        
         N1_nodes = 0
         while N1_nodes == 0      
             N1_nodes = find_nodes(network[p1], N_connections, all_nodes) #nodes from pop 1 
