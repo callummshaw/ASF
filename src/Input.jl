@@ -395,8 +395,8 @@ function parameter_build(sim, pops, sea, init_pops, counts, adj)
     la = Vector{Float32}(undef, n_pops)
     lo = Vector{Float32}(undef, n_pops)
     
-    ds1 = zeros(UInt8, cs[1]-cs[0])
-    ds2 = zeros(UInt8, cs[1]-cs[0])
+    ds1 = zeros(UInt8, cs[2]-cs[1])
+    ds2 = zeros(UInt8, cs[2]-cs[1])
 
     for i in 1:n_pops
         

@@ -83,13 +83,26 @@ function Model_sim(input_path; adj = [0,0], pop_net = 0)
             
         end
 
+
+        function prob_func(prob, i, repeat)
+            
+            input_new =  Input.Model_Data(input_path, adj, pop_net, verbose = false)
+            
+            if MN == 2
+                pn = convert_homogeneous(input_new.Parameters)
+            else 
+                if input_new.Parameters.Populations.pop == 1 
+                    pn = convert_heterogeneous(input_new.Parameters)
+                else 
+                    pn = input_new.Parameters
+                end
+            end
+
+            remake(prob, u0 = input_new.U0, p = pn)
+        end
+
         if MN == 2 #M2!
 
-            function prob_func(prob, i, repeat)
-                input_new =  Input.Model_Data(input_path, adj, pop_net, verbose = false)
-                pn = convert_homogeneous(input_new.Parameters)
-                remake(prob, u0 = input_new.U0, p = pn)
-            end
 
             rj = RegularJump(Models.ASF_M2, regular_c, eqs)
                 
@@ -99,23 +112,11 @@ function Model_sim(input_path; adj = [0,0], pop_net = 0)
         
             if input.Parameters.Populations.pop == 1 #M3 with one pop!
                 
-                function prob_func(prob, i, repeat)
-                    input_new =  Input.Model_Data(input_path, adj, pop_net, verbose = false)
-                    pn = convert_heterogeneous(input_new.Parameters)
-                    remake(prob, u0 = input_new.U0, p = pn)
-                end
-
                 rj = RegularJump(Models.ASF_M3_single, regular_c, eqs*nt)
                 
                 P = convert_heterogeneous(input.Parameters) #convert to a simple vector of inputs as most not needed
             
             else #running multi!
-
-                function prob_func(prob, i, repeat)
-
-                    input_new =  Input.Model_Data(input_path, adj, pop_net, verbose = false)
-                    remake(prob, u0 = input_new.U0, p = input_new.Parameters)
-                end
 
                 rj = RegularJump(Models.ASF_M3_full, regular_c, eqs*nt)
 
