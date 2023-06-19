@@ -328,7 +328,7 @@ struct Model_Data
     MN::Int8 #which model we are running with (1- ODE, 2-Tau Homogeneous, 3-Tau Heterogeneous)
     Time::Tuple{Float32, Float32} #Model run time
     NR::Int64 #number of runs in ensemble!
-    U0::Vector{UInt8} #Initial Population
+    U0::Vector{Int16} #Initial Population
     Parameters::Model_Parameters #Model parameters
     #Populations_data::Vector{Population_Data} #distributions for params
 
