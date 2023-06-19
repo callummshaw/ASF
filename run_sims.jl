@@ -5,16 +5,18 @@ using CSV
 
 function simulate_births_deaths(ip)
 
-    if !isdir(ip*"/Output_SW")
-        mkdir(ip*"/Output_SW")
+    save = "/test"
+    if !isdir(ip*save)
+        mkdir(ip*save)
     end
-    n_sims = 500
+
+    n_sims = 10
 
     births = rand(Uniform(0.5,0.95),n_sims)
     decay = rand(Uniform(0.5,1.5),n_sims)
 
-    writedlm(ip*"/Output_SW/births.csv", births, ',')
-    writedlm(ip*"/Output_SW/decay.csv", decay, ',')
+    writedlm(ip*save*"/births.csv", births, ',')
+    writedlm(ip*save*"/decay.csv", decay, ',')
 
     #output = zeros(Int16,n_sims) 
 
@@ -25,15 +27,15 @@ function simulate_births_deaths(ip)
         sim_data = out.u
         
         if i == 1
-            writedlm(ip*"/Output_SW/Sim_output.csv", [sum(sim_data .> 0)], ',')
+            writedlm(ip*save*"/Sim_output.csv", [sum(sim_data .> 0)], ',')
         else
-            CSV.write(ip*"/Output_SW/Sim_output.csv", (data = [sum(sim_data .> 0)],), append = true)
+            CSV.write(ip*save*"/Sim_output.csv", (data = [sum(sim_data .> 0)],), append = true)
         end
     end
 end
 
-println("ACT")
-simulate_births_deaths("Inputs/ACT/")
+#println("ACT")
+#simulate_births_deaths("Inputs/ACT/")
 println("NSW")
 simulate_births_deaths("Inputs/NSW/")
 println("QLD")

@@ -41,7 +41,7 @@ Recovery,8,1
 #Immunity waning period (days)
 Immunity,180,7
 #Corpse decay period (days) seasonality file for seasonal changes
-Decay_feral,45,0
+Decay_feral,17.5,0
 #Number of farms
 N_farm,0,0
 #Farm size

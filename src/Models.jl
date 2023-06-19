@@ -274,14 +274,12 @@ function ASF_M2(out,u,p,t)
     end
    
     beta_mod = sqrt((Np/Area)/ref_density)
-    
-    
+
     Lambda = λ + la * cos.((t + lo) * 2*pi/365) #decay
     p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
-    
-    Deaths = μ_p*(σ + ((1-σ))* beta_mod) #rate
-    Births = p_mag*(σ * Np + ((1-σ)) * sqrt(Np * K))#total! (rate times NP)
-    
+ 
+    Deaths = μ_p*(σ + ((1-σ))* sqrt(Np/K)) #rate
+    Births = p_mag*(σ * Np + ((1-σ)) * sqrt(Np)*sqrt(K))#total! (rate times NP)
     
     #11 processes
     out[1] = Births
@@ -295,7 +293,7 @@ function ASF_M2(out,u,p,t)
     out[9] = R * Deaths
     out[10] = (1 / Lambda) * C
     out[11] = κ * R 
-
+   
     nothing
 end
 

@@ -27,7 +27,7 @@ function Model_sim(input_path; adj = [0,0], pop_net = 0)
 
     input = Input.Model_Data(input_path, adj, pop_net, verbose = false); #all input data!
 
-    n_sims  = input.NR
+    n_sims  = 50#input.NR
     
     MN = input.MN
    
@@ -103,7 +103,6 @@ function Model_sim(input_path; adj = [0,0], pop_net = 0)
 
         if MN == 2 #M2!
 
-
             rj = RegularJump(Models.ASF_M2, regular_c, eqs)
                 
             P = convert_homogeneous(input.Parameters) #convert to a simple vector of inputs as most not needed
@@ -125,7 +124,7 @@ function Model_sim(input_path; adj = [0,0], pop_net = 0)
             end
 
         end
-
+        
         prob = DiscreteProblem(input.U0,input.Time, P)#hetero_single_test(input.Parameters))
         jump_prob = JumpProblem(prob,Direct(),rj)
 
