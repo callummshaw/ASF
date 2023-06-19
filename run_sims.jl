@@ -21,7 +21,7 @@ function simulate_births_deaths(ip)
     for i in 1:n_sims
         bm = births[i]
         dm = decay[i]
-        out = Model_sim(ip, bm, dm)
+	out = Model_sim(ip, [bm, dm])
         sim_data = out.u
         
         if i == 1

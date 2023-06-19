@@ -272,7 +272,6 @@ struct Seasonal_effect
 
 end
 
-
 struct Model_Parameters
     #=
     Structure to store key parameters
@@ -308,14 +307,16 @@ struct Model_Parameters
 
     Populations::Network.Network_Data #breakdown of population
    
-
-    function Model_Parameters(sim, pops, sea, U0, density, area, Populations,  bm, dm)
+    ds1::Vector{UInt8}
+    ds2::Vector{UInt8}
+    
+    function Model_Parameters(sim, pops, sea, U0, density, area, Populations,  adj)
         
         β_o, β_i = Beta.construction(sim, pops, Populations)
 
-        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo  = parameter_build(sim, pops, sea, U0, Populations, bm, dm)
+        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo, ds1, ds2  = parameter_build(sim, pops, sea, U0, Populations, adj)
 
-        new(β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, density, area, Populations)
+        new(β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, density, area, Populations, ds1, ds2)
     end
     
 end
@@ -327,11 +328,11 @@ struct Model_Data
     MN::Int8 #which model we are running with (1- ODE, 2-Tau Homogeneous, 3-Tau Heterogeneous)
     Time::Tuple{Float32, Float32} #Model run time
     NR::Int64 #number of runs in ensemble!
-    U0::Vector{Int32} #Initial Population
+    U0::Vector{UInt8} #Initial Population
     Parameters::Model_Parameters #Model parameters
     #Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path, bm, dm; pop_net= 0, verbose = false)
+    function Model_Data(Path, adj, pop_net; verbose = false)
         #custom_network parameter used for fitting!
         sim, pops, sea = read_inputs(Path, verbose)
 
@@ -343,7 +344,7 @@ struct Model_Data
         #Now using network to build init pops
         S0, density, area = Population.build_s(sim, pops, counts, verbose) #initial populations
      
-        Parameters = Model_Parameters(sim, pops, sea, S0, density, area, counts, bm, dm)
+        Parameters = Model_Parameters(sim, pops, sea, S0, density, area, counts, adj)
         
         U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
         
@@ -351,7 +352,6 @@ struct Model_Data
     end
     
 end
-
 
 function day_to_rate(Mean, STD)
     #simple conversion to switch between time and rate
@@ -361,16 +361,17 @@ function day_to_rate(Mean, STD)
     return [mean_rate, std_rate]
 end
 
-function parameter_build(sim, pops, sea, init_pops, counts, bm, dm)
+function parameter_build(sim, pops, sea, init_pops, counts, adj)
     #=
     Function that builds most parameters for model
-    =#
-    
-   
-    
+    =# 
+    bm = adj[1]
+    dm = adj[2]
     n_p = sim.N_Pop # number of populations per region
     n_r = size(pops)[1] #number of regions
     n_pops = n_p*n_r #total number of populations
+ 
+    cs = counts.cum_sum
 
     #Group different params
     K = Vector{Vector{Int16}}(undef,n_pops)
@@ -393,8 +394,10 @@ function parameter_build(sim, pops, sea, init_pops, counts, bm, dm)
     k = Vector{Float32}(undef, n_pops)
     la = Vector{Float32}(undef, n_pops)
     lo = Vector{Float32}(undef, n_pops)
-
     
+    ds1 = zeros(UInt8, cs[1]-cs[0])
+    ds2 = zeros(UInt8, cs[1]-cs[0])
+
     for i in 1:n_pops
         
         j = (i-1) ÷ n_p + 1
@@ -405,9 +408,7 @@ function parameter_build(sim, pops, sea, init_pops, counts, bm, dm)
         nf = counts.feral[i]
         nl = counts.farm[i]
         nt = counts.total[i]
-        
-        cs = counts.cum_sum
-        
+    
         σ[i] = data.Density_rate[1]
         θ[i] = data.Density_power[1]
         g[i] = data.g_fit[1]
@@ -419,10 +420,19 @@ function parameter_build(sim, pops, sea, init_pops, counts, bm, dm)
             γ[i] = repeat([data.Recovery[1]], nt)
             ρ[i] = repeat([data.Death[1]], nt)
             κ[i] = repeat([data.Immunity[1]], nt)
-            λ[i] = dm .* append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
             
-            #birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-data.LM[1])/365
-            birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-bm)/365
+            if dm ==0
+                λ[i] = append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
+            else
+                λ[i] = dm .* append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
+            end 
+
+            if bm == 0
+                birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-data.LM[1])/365
+            else
+                birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-bm)/365
+            end
+            
             μ_p[i] = repeat([birth_rate], nt)
 
         else #running of distros
@@ -443,10 +453,18 @@ function parameter_build(sim, pops, sea, init_pops, counts, bm, dm)
             
             ρ[i] = rand(ρ_d,nt)
             κ[i] = rand(κ_d,nt)
-            λ[i] = dm .* append!(rand(λ_fd,nf),rand(λ_ld,nl))
 
-            #μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) ./ 365
-            μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- bm) ./ 365
+            if dm == 0
+                λ[i] = append!(rand(λ_fd,nf),rand(λ_ld,nl))
+            else
+                λ[i] = dm .* append!(rand(λ_fd,nf),rand(λ_ld,nl))
+            end
+
+            if bm == 0
+                μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) ./ 365
+            else    
+                μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- bm) ./ 365
+            end
         end
 
 
@@ -503,7 +521,7 @@ function parameter_build(sim, pops, sea, init_pops, counts, bm, dm)
         
     end
 
-    return  μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo
+    return  μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo, ds1, ds2
     
 end
 

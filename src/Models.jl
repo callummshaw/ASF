@@ -28,7 +28,6 @@ function ASF_M3_full(out,u,p,t)
     for i in 1:pop_data.pop #looping through populations!
         
         s0 = pop_data.cum_sum[i] #start index of pop
-        si = pop_data.cum_sum[i]+1 #start index of pop
         ei = pop_data.cum_sum[i+1] #end index of pop
 
         S = Vector{UInt8}(u[5*s0+1:5:5*ei])
@@ -67,11 +66,16 @@ function ASF_M3_full(out,u,p,t)
             
             n_r = (n_empty/tg)^2 #squared to reduce intesity
             
+
+            t2 .= Np
+            t2[t2 .< 2] .= 0
+            t1 .= nets * t2
+
             dd = copy(Np)
             dd[dd .< 2] .= 0
             connected_pops = pop_data.networks[i] * dd
 
-                #Groups with 3 or more pigs can have emigration
+            #Groups with 3 or more pigs can have emigration
             mask_em =  (dd .> 0) #populations that will have emigration
 
             em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
@@ -188,7 +192,6 @@ function ASF_M3_single(out,u,p,t)
     Deaths = @. μ_p*(σ + ((1-σ))*sqrt(Np./K))*g #rate
     Births = @. p_mag*(σ * Np + ((1-σ)) * sqrt(Np .* K))#total! (rate times NP)
 
-
     #now stopping boar births
     mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
     boar_births = p_mag*sum(mask_boar)
@@ -205,8 +208,8 @@ function ASF_M3_single(out,u,p,t)
             t2 .= Np
             t2[t2 .< 2] .= 0
             t1 .= nets * t2
-
-                #Groups with 3 or more pigs can have emigration
+            
+            #Groups with 3 or more pigs can have emigration
             mask_em =  (t2 .> 0) #populations that will have emigration
 
             em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
