@@ -264,7 +264,7 @@ function asf_model_burn_multi(out,u,p,t)
     
     p_mag = birth_pulse_vector(t,k,bw,bo)
    
-    Births = p_mag.*(σ .* u .+ ((1-σ)) .* sqrt.(abs.(u .* K)))#total! (rate times NP)
+    Births = p_mag.*(σ .* u .+ ((1-σ)) .* sqrt.(u)*sqrt(K))#total! (rate times NP)
    
     #now stopping and transferring boar births
     mask_boar = (K .== 1) .& (u .> 0) #boars with a positive population
@@ -319,7 +319,7 @@ function asf_model_burn_multi_full(out,u,p,t)
         tg = length(S) #total groups in all populations
         
         p_mag = @. p.k[i]*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
-        Births = @. p_mag*(0.75 * S + ((0.25)) * sqrt(S * K))#total! (rate times NP)
+        Births = @. p_mag*(0.75 * S + ((0.25)) * sqrt(S) * sqrt(K))#total! (rate times NP)
 
         #now stopping boar births
         mask_boar = (K .== 1) .& (S .> 0) #boars with a positive population

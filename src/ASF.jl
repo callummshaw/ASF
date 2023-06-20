@@ -27,7 +27,7 @@ function Model_sim(input_path; adj = [0,0], pop_net = 0)
 
     input = Input.Model_Data(input_path, adj, pop_net, verbose = false); #all input data!
 
-    n_sims  = 50#input.NR
+    n_sims  = input.NR
     
     MN = input.MN
    

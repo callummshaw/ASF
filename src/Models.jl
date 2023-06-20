@@ -30,11 +30,11 @@ function ASF_M3_full(out,u,p,t)
         s0 = pop_data.cum_sum[i] #start index of pop
         ei = pop_data.cum_sum[i+1] #end index of pop
 
-        S = Vector{UInt8}(u[5*s0+1:5:5*ei])
-        E = Vector{UInt8}(u[5*s0+2:5:5*ei])
-        I = Vector{UInt8}(u[5*s0+3:5:5*ei])
-        R = Vector{UInt8}(u[5*s0+4:5:5*ei])
-        C = Vector{UInt8}(u[5*s0+5:5:5*ei])
+        S = Vector{UInt16}(u[5*s0+1:5:5*ei])
+        E = Vector{UInt16}(u[5*s0+2:5:5*ei])
+        I = Vector{UInt16}(u[5*s0+3:5:5*ei])
+        R = Vector{UInt16}(u[5*s0+4:5:5*ei])
+        C = Vector{UInt16}(u[5*s0+5:5:5*ei])
         
         Np = S + E + I + R
         Nt = Np + C
@@ -46,12 +46,12 @@ function ASF_M3_full(out,u,p,t)
         tg = length(Np) #total groups in all populations
         tp = sum(Np) # total living pigs
         
-        d_eff = sqrt((tp / pop_data.area[i]) / ref_density) #account for different densities between fitting and current pop
+        d_eff = sqrt((tp / p.area[i]) / ref_density) #account for different densities between fitting and current pop
         deff_s[i] = d_eff
        
         p_mag = @. p.k[i]*exp(-p.bw[i]*cos.(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
         Deaths = @. p.μ_p[i]*(0.75 + ((1-0.75))*sqrt(Np/K))*p.g[i] #rate
-        Births = @. p_mag*(0.75 * Np + ((1-0.75)) * sqrt(Np * K))#total! (rate times NP)
+        Births = @. p_mag*(0.75 * Np + ((1-0.75)) * sqrt(Np)*sqrt(K))#total! (rate times NP)
 
         #now stopping boar births
         mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
@@ -65,11 +65,6 @@ function ASF_M3_full(out,u,p,t)
         if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
             
             n_r = (n_empty/tg)^2 #squared to reduce intesity
-            
-
-            t2 .= Np
-            t2[t2 .< 2] .= 0
-            t1 .= nets * t2
 
             dd = copy(Np)
             dd[dd .< 2] .= 0
@@ -170,11 +165,11 @@ function ASF_M3_single(out,u,p,t)
 
     u[u.<0] .= 0
    
-    S = Vector{UInt8}(u[1:5:end])
-    E = Vector{UInt8}(u[2:5:end])
-    I = Vector{UInt8}(u[3:5:end])
-    R = Vector{UInt8}(u[4:5:end])
-    C = Vector{UInt8}(u[5:5:end])
+    S = Vector{UInt16}(u[1:5:end])
+    E = Vector{UInt16}(u[2:5:end])
+    I = Vector{UInt16}(u[3:5:end])
+    R = Vector{UInt16}(u[4:5:end])
+    C = Vector{UInt16}(u[5:5:end])
   
     Np = S .+ E .+ I .+ R
     Nt = Np .+ C
@@ -190,7 +185,7 @@ function ASF_M3_single(out,u,p,t)
     p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
    
     Deaths = @. μ_p*(σ + ((1-σ))*sqrt(Np./K))*g #rate
-    Births = @. p_mag*(σ * Np + ((1-σ)) * sqrt(Np .* K))#total! (rate times NP)
+    Births = @. p_mag*(σ * Np + ((1-σ)) * sqrt(Np)*sqrt(K))#total! (rate times NP)
 
     #now stopping boar births
     mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
@@ -254,6 +249,7 @@ function ASF_M3_single(out,u,p,t)
      out[11:11:end].= @. κ*R 
    
     nothing
+
 end
 
 function ASF_M2(out,u,p,t)
@@ -296,7 +292,6 @@ function ASF_M2(out,u,p,t)
    
     nothing
 end
-
 
 function ASF_M1(du,u,p,t)
     
