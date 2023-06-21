@@ -348,7 +348,6 @@ function asf_model_burn_multi_full(out,u,p,t)
         end     
 
         end 
-        
       
         out[2*(si-1)+1:2:2*ei] .= Births
         out[2*(si-1)+2:2:2*ei] .=  @. S *  p.μ_p[i]*(0.75 + ((0.25))*sqrt(S/K))*p.g[i] #rate

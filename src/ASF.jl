@@ -22,15 +22,16 @@ include("Input.jl") #the input
 include("Analyse.jl") #some simple analysis
 
 
-function Model_sim(input_path; adj = [0,0], pop_net = 0)
+function Model_sim(input_path; adj = [0], pop_net = 0)
     #wrapper function to run ASF models!
 
     input = Input.Model_Data(input_path, adj, pop_net, verbose = false); #all input data!
 
     n_sims  = input.NR
-    
+    n_pops = input.Parameters.Populations.pop
+    groups_per_pop = input.Parameters.Populations.cum_sum
     MN = input.MN
-   
+
     if MN == 1 #running ODE model!
 
         params = convert_homogeneous(input.Parameters) #converting params to single array!
@@ -41,7 +42,7 @@ function Model_sim(input_path; adj = [0,0], pop_net = 0)
         
     else #running TAU model!
          
-        nt = input.Parameters.Populations.cum_sum[end] #total number of groups and/or farms
+        nt = groups_per_pop[end] #total number of groups and/or farms
         
         nc = 5 #number of classes (SEIRC)
         eqs = 11 #number of processes
@@ -78,11 +79,31 @@ function Model_sim(input_path; adj = [0,0], pop_net = 0)
         end
 
         function output_func(sol,i) 
+           
             GC.gc()
-            (sum(sol[end][2:5:end] + sol[end][3:5:end] + sol[end][5:5:end]), false)
+
+            data = reduce(vcat,transpose.(sol.u))
+            
+            dd = Vector{Vector{Int64}}(undef,n_pops)
+            fd = Vector{Vector{Int64}}(undef,n_pops)
+            for i in 1:n_pops
+
+                s0 = groups_per_pop[i] #start index of pop
+                ei = groups_per_pop[i+1] #end index of pop
+                
+                s_d = sum(data[:,5*s0+1:5:5*ei],dims=2)
+                e_d = sum(data[:,5*s0+2:5:5*ei],dims=2)
+                i_d = sum(data[:,5*s0+3:5:5*ei],dims=2)
+                r_d = sum(data[:,5*s0+4:5:5*ei],dims=2)
+                c_d = sum(data[:,5*s0+5:5:5*ei],dims=2)
+   
+                dd[i] = vec(e_d +i_d + c_d)
+                fd[i] = vec(s_d + r_d)
+            end
+            
+            ([dd,fd], false)
             
         end
-
 
         function prob_func(prob, i, repeat)
             

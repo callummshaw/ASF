@@ -366,7 +366,7 @@ function parameter_build(sim, pops, sea, init_pops, counts, adj)
     Function that builds most parameters for model
     =# 
     bm = adj[1]
-    dm = adj[2]
+  
     n_p = sim.N_Pop # number of populations per region
     n_r = size(pops)[1] #number of regions
     n_pops = n_p*n_r #total number of populations
@@ -420,13 +420,14 @@ function parameter_build(sim, pops, sea, init_pops, counts, adj)
             γ[i] = repeat([data.Recovery[1]], nt)
             ρ[i] = repeat([data.Death[1]], nt)
             κ[i] = repeat([data.Immunity[1]], nt)
-            
+            λ[i] = append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
+            #=
             if dm ==0
                 λ[i] = append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
             else
                 λ[i] = dm .* append!(repeat([data.Decay_f[1]], nf),repeat([data.Decay_l[1]], nl))
             end 
-
+        =#
             if bm == 0
                 birth_rate = 0.5*data.LN[1]*data.LS[1]*(1-data.LM[1])/365
             else
@@ -453,13 +454,14 @@ function parameter_build(sim, pops, sea, init_pops, counts, adj)
             
             ρ[i] = rand(ρ_d,nt)
             κ[i] = rand(κ_d,nt)
-
+            λ[i] = append!(rand(λ_fd,nf),rand(λ_ld,nl))
+            #=
             if dm == 0
                 λ[i] = append!(rand(λ_fd,nf),rand(λ_ld,nl))
             else
                 λ[i] = dm .* append!(rand(λ_fd,nf),rand(λ_ld,nl))
             end
-
+            =#
             if bm == 0
                 μ_p[i] =  0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LM_d,nt)) ./ 365
             else    
@@ -504,7 +506,7 @@ function parameter_build(sim, pops, sea, init_pops, counts, adj)
 
             bw[i] = data_s.Birth_width
             bo[i] = data_s.Birth_offset
-            la[i] = dm .* data_s.Decay_amp
+            la[i] = data_s.Decay_amp #DM
             lo[i] = data_s.Decay_offset
 
             k[i]  = birthpulse_norm(data_s.Birth_width, mean(μ_p[i]))
