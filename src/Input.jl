@@ -307,8 +307,8 @@ struct Model_Parameters
 
     Populations::Network.Network_Data #breakdown of population
    
-    ds1::Vector{UInt8}
-    ds2::Vector{UInt8}
+    ds1::Vector{UInt16}
+    ds2::Vector{UInt16}
     
     function Model_Parameters(sim, pops, sea, U0, density, area, Populations,  adj)
         
@@ -395,8 +395,8 @@ function parameter_build(sim, pops, sea, init_pops, counts, adj)
     la = Vector{Float32}(undef, n_pops)
     lo = Vector{Float32}(undef, n_pops)
     
-    ds1 = zeros(UInt8, cs[2]-cs[1])
-    ds2 = zeros(UInt8, cs[2]-cs[1])
+    ds1 = zeros(UInt16, cs[2]-cs[1])
+    ds2 = zeros(UInt16, cs[2]-cs[1])
 
     for i in 1:n_pops
         

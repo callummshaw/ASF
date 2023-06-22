@@ -3,7 +3,7 @@ Name,Mean,STD
 #Density
 Density,10,0
 #Number of feral groups (will default to 1 while running model for M1 and M2, but will be used to generate population)
-N_feral,1000,0
+N_feral,250,0
 #Feral group size
 Feral_size,10,0
 #Ratio of lone boars
@@ -11,9 +11,9 @@ Boar,0.2,0
 #Number of interconnection for groups within population
 N_int,6,0
 #Exposed population proportion in seeded populations (%) 
-Exp_p,0.5,0
+Exp_p,2,0
 #Infected population proportion in seeded populations (%)
-Inf_p,0.5,0
+Inf_p,2,0
 #Litters per year
 Litter_n,1.93,0
 #Litter Size
