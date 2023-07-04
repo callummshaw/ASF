@@ -25,6 +25,9 @@ function ASF_M3_full(out,u,p,t)
    
     pop_data = p.Populations
     deff_s = zeros(Float32,pop_data.pop)
+
+    yn = Int(((t-183) ÷ year) +1)
+
     for i in 1:pop_data.pop #looping through populations!
         
         s0 = pop_data.cum_sum[i] #start index of pop
@@ -49,8 +52,8 @@ function ASF_M3_full(out,u,p,t)
         d_eff = sqrt((tp / p.area[i]) / ref_density) #account for different densities between fitting and current pop
         deff_s[i] = d_eff
        
-        p_mag = @. p.k[i]*exp(-p.bw[i]*cos.(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
-        Deaths = @. p.μ_p[i]*(0.75 + ((1-0.75))*sqrt(Np/K))*p.g[i] #rate
+        p_mag = @. p.k[i][yn]*exp(-p.bw[i]*cos.(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
+        Deaths = @. p.μ_p[i][yn]*(0.75 + ((1-0.75))*sqrt(Np/K))*p.g[i] #rate
         Births = @. p_mag*(0.75 * Np + ((1-0.75)) * sqrt(Np)*sqrt(K))#total! (rate times NP)
 
         #now stopping boar births
@@ -182,9 +185,12 @@ function ASF_M3_single(out,u,p,t)
     d_eff = sqrt((tp / area) / ref_density) #account for different densities between fitting and current pop
     
     Lambda = @. λ + la * cos((t + lo) * 2*pi/year) #decay
-    p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
+
+    yn = Int(((t-183) ÷ year) +1)
    
-    Deaths = @. μ_p*(σ + ((1-σ))*sqrt(Np./K))*g #rate
+    p_mag = birth_pulse_vector(t,k[yn],bw,bo) #birth pulse value at time t
+   
+    Deaths = @. μ_p[yn]*(σ + ((1-σ))*sqrt(Np./K))*g #rate
     Births = @. p_mag*(σ * Np + ((1-σ)) * sqrt(Np)*sqrt(K))#total! (rate times NP)
 
     #now stopping boar births
@@ -269,12 +275,14 @@ function ASF_M2(out,u,p,t)
         Nt = 1
     end
    
+    yn = Int(((t-183) ÷ 365) +1)
+
     beta_mod = sqrt((Np/Area)/ref_density)
 
     Lambda = λ + la * cos.((t + lo) * 2*pi/365) #decay
-    p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
- 
-    Deaths = μ_p*(σ + ((1-σ))* sqrt(Np/K)) #rate
+    p_mag = birth_pulse_vector(t,k[yn],bw,bo) #birth pulse value at time t
+    
+    Deaths = μ_p[yn][1]*(σ + ((1-σ))* sqrt(Np/K)) #rate
     Births = p_mag*(σ * Np + ((1-σ)) * sqrt(Np)*sqrt(K))#total! (rate times NP)
     
     #11 processes
@@ -302,7 +310,7 @@ function ASF_M1(du,u,p,t)
     
     S, E, I, R, C = u
     Np = S + E + I + R
-    Nt = N + C 
+    Nt = Np + C 
     
     if Nt == 0 
         Nt = 1
@@ -310,17 +318,18 @@ function ASF_M1(du,u,p,t)
    
     beta_mod = sqrt((Np/Area)/ref_density)
     
+    yn = Int(((t-183) ÷ 365) +1)
     
     #if Seasonal    
     Lambda = λ + la * cos((t + lo) * 2*pi/365) #decay
-    p_mag = birth_pulse_vector(t,k,bw,bo) #birth pulse value at time t
+    p_mag = birth_pulse_vector(t,k[yn],bw,bo) #birth pulse value at time t
     #else 
      #   Lambda = λ
       #  p_mag = μ_p
     #end
 
     #if θ == 0.5 #density births and death!
-    ds = μ_p*(σ+ ((1-σ))*beta_mod) #rate
+    ds = μ_p[yn][1]*(σ+ ((1-σ))*beta_mod) #rate
     Births = p_mag*(σ * Np + ((1-σ)) * sqrt(Np * K))#total! (rate times NP)
    # else
      #   ds = μ_p.*(σ .+ ((1-σ)).*(Np./K).^θ) #rate

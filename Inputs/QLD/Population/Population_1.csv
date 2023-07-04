@@ -18,8 +18,10 @@ Inf_p,2,0
 Litter_n,1.64,0
 #Litter Size
 Litter_s,6.4,0
-#First year mortality rate
-Litter_mu,0.51,0
+#First year mortality rate high (low rain year)
+Litter_mu_h,0.9,0
+#First year mortality rate low (high rain year)
+Litter_mu_l,0.5,0
 #Percent of natural birth/death rates that are NOT dependent on population density
 Density_rate,0.75,0
 #Power of (K/N) or (N/K) used for density birth/death rates

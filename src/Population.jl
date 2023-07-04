@@ -7,6 +7,7 @@ using Random
 using DifferentialEquations
 using LinearAlgebra
 using SparseArrays 
+using QuadGK
 
 export burn_population
 export build_s
@@ -14,13 +15,11 @@ export build_s
 function spinup_and_seed(sim,pops, S0, Parameters, verbose)
     # wrapper function to burn in different populations to desired day, different methods for different models
     
-    
     Mn = sim.Model #model number
     Np = Parameters.Populations.pop #number of populations!
-
     #Calculating the correct population at the start date
-   
-    if Mn == 3 & Np == 1 #Model 3 with single population
+
+    if (Mn == 3) & (Np == 1) #Model 3 with single population
         S1 = burn_m3_single(sim,S0, Parameters) 
     elseif Mn == 3 #Model 3 with multiple population 
         S1 = burn_m3_full(sim,S0,Parameters)
@@ -187,8 +186,10 @@ function burn_m3_single(sim,S0, PP)
         mul!(du,dc,counts)
         nothing
     end
-
-    params = [PP.μ_p[1], PP.K[1], 0, PP.g[1], PP.bw[1], PP.bo[1], PP.k[1], PP.Populations.networks[1]]
+    
+    μ = mean(PP.μ_p[1][end]) #taking value from last year!
+    k = birthpulse_norm(PP.bw[1], μ)
+    params = [μ, PP.K[1], 0, PP.g[1], PP.bw[1], PP.bo[1], k, PP.Populations.networks[1]]
     
     rj_burn = RegularJump(asf_model_burn_multi, regular_c, eqs*NG)
     prob_burn = DiscreteProblem(S0,tspan,params)
@@ -199,7 +200,6 @@ function burn_m3_single(sim,S0, PP)
    
     return S1
 end
-
 
 function burn_m3_full(sim,S0, PP)
 
@@ -233,7 +233,8 @@ function burn_m1m2(sim,U0, PP)
     #Function to run homogeneous burn in!
     ny = 10 #will allow for 10 years spinup time
     tspan = (0.0,ny*365+sim.S_day)
-    params = [PP.μ_p[1][1],PP.K[1][1],0,PP.bw[1],PP.bo[1], PP.k[1]] #\simga = 0 allows for faster return to correct K!
+#taking value from last year!
+    params = [PP.μ_p[1][end][1],PP.K[1][1],0,PP.bw[1],PP.bo[1], PP.k[1][end]] #\simga = 0 allows for faster return to correct K!
      #only need to run on S, so can not use others!
     prob_ode = ODEProblem(asf_model_burn_single, U0, tspan,params)
     sol = solve(prob_ode, saveat = ny*365+sim.S_day,reltol=1e-8)
@@ -244,7 +245,6 @@ end
 function asf_model_burn_single(du,u,p,t)
     #ode equivelent of our ASF model
     μ_p, K, σ, bw, bo, k  = p 
-
     S = u[1]
     ds = μ_p*(σ + ((1-σ))*sqrt(S/K))
        
@@ -264,7 +264,7 @@ function asf_model_burn_multi(out,u,p,t)
     
     p_mag = birth_pulse_vector(t,k,bw,bo)
    
-    Births = p_mag.*(σ .* u .+ ((1-σ)) .* sqrt.(u)*sqrt(K))#total! (rate times NP)
+    Births =  @. p_mag * (σ * u + ((1-σ)) * sqrt(u) * sqrt(K))#total! (rate times NP)
    
     #now stopping and transferring boar births
     mask_boar = (K .== 1) .& (u .> 0) #boars with a positive population
@@ -318,7 +318,7 @@ function asf_model_burn_multi_full(out,u,p,t)
         
         tg = length(S) #total groups in all populations
         
-        p_mag = @. p.k[i]*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
+        p_mag = @. p.k[i][end]*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
         Births = @. p_mag*(0.75 * S + ((0.25)) * sqrt(S) * sqrt(K))#total! (rate times NP)
 
         #now stopping boar births
@@ -350,7 +350,7 @@ function asf_model_burn_multi_full(out,u,p,t)
         end 
       
         out[2*(si-1)+1:2:2*ei] .= Births
-        out[2*(si-1)+2:2:2*ei] .=  @. S *  p.μ_p[i]*(0.75 + ((0.25))*sqrt(S/K))*p.g[i] #rate
+        out[2*(si-1)+2:2:2*ei] .=  @. S *  p.μ_p[i][end]*(0.75 + ((0.25))*sqrt(S/K))*p.g[i] #rate
        
     end
 
@@ -519,6 +519,12 @@ function find_nodes(Network, N_connections)
     return p1g
 
 end
-
+function birthpulse_norm(s, DT)
+   
+    integral, err = quadgk(x -> exp(-s*cos(pi*x/365)^2), 1, 365, rtol=1e-8);
+    k = (365*DT)/integral 
+    
+    return k
+end
 
 end

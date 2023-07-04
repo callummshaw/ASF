@@ -22,10 +22,10 @@ include("Input.jl") #the input
 include("Analyse.jl") #some simple analysis
 
 
-function Model_sim(input_path; adj = [0], pop_net = 0)
+function Model_sim(input_path; pop_net = 0, year_array = 0)
     #wrapper function to run ASF models!
 
-    input = Input.Model_Data(input_path, adj, pop_net, verbose = false); #all input data!
+    input = Input.Model_Data(input_path, pop_net, year_array, verbose = false); #all input data!
 
     n_sims  = input.NR
     n_pops = input.Parameters.Populations.pop
@@ -38,7 +38,7 @@ function Model_sim(input_path; adj = [0], pop_net = 0)
         
         prob_ode = ODEProblem(Models.ASF_M1, input.U0, input.Time, params) #setting up ode model
         
-        sol = solve(prob_ode, saveat = 1,reltol=1e-8) #running ode model!
+        sim = solve(prob_ode, saveat = 1,reltol=1e-8) #running ode model!
         
     else #running TAU model!
          
@@ -106,8 +106,7 @@ function Model_sim(input_path; adj = [0], pop_net = 0)
         end
 
         function prob_func(prob, i, repeat)
-            
-            input_new =  Input.Model_Data(input_path, adj, pop_net, verbose = false)
+            input_new =  Input.Model_Data(input_path, pop_net, year_array, verbose = false)
             
             if MN == 2
                 pn = convert_homogeneous(input_new.Parameters)
@@ -137,7 +136,6 @@ function Model_sim(input_path; adj = [0], pop_net = 0)
                 P = convert_heterogeneous(input.Parameters) #convert to a simple vector of inputs as most not needed
             
             else #running multi!
-
                 rj = RegularJump(Models.ASF_M3_full, regular_c, eqs*nt)
 
                 P = input.Parameters
@@ -170,7 +168,7 @@ function convert_homogeneous(input)
     params = Vector{Any}(undef,18)
 
     params[1]  = input.β_o[1][1]
-    params[2]  = input.μ_p[1][1]
+    params[2]  = input.μ_p[1]
     params[3]  = input.K[1][1]
     params[4]  = input.ζ[1][1]
     params[5]  = input.γ[1][1]
@@ -178,7 +176,6 @@ function convert_homogeneous(input)
     params[7]  = input.ρ[1][1]
     params[8]  = input.λ[1][1]
     params[9]  = input.κ[1][1]
-    
     params[10] = input.σ[1]
     params[11] = input.θ[1]
     params[12] = input.Seasonal
