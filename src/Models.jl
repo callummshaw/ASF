@@ -187,7 +187,6 @@ function ASF_M3_single(out,u,p,t)
     Lambda = @. λ + la * cos((t + lo) * 2*pi/year) #decay
 
     yn = Int(((t-183) ÷ year) +1)
-   
     p_mag = birth_pulse_vector(t,k[yn],bw,bo) #birth pulse value at time t
    
     Deaths = @. μ_p[yn]*(σ + ((1-σ))*sqrt(Np./K))*g #rate

@@ -49,9 +49,10 @@ function construction(sim, pops, counts)
                 df_beta_intra = shuffle(Array(CSV.read(path*"/contact_in.csv", DataFrame, header=false)))
                 df_beta_inter = shuffle(Array(CSV.read(path*"/contact_out.csv", DataFrame, header=false)))
 
-                beta_i[i] = df_beta_intra[1:ng]
-                beta_o[i] = df_beta_inter[1:ng]./6
-                
+                #beta_i[i] = df_beta_intra[1:ng]
+                #beta_o[i] = df_beta_inter[1:ng]./6
+                beta_i[i] = repeat([df_beta_intra[1]],ng)
+                beta_o[i] = repeat([df_beta_inter[1]],ng)./6
             end
 
 

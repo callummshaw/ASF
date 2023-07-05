@@ -338,7 +338,6 @@ struct Model_Data
         S0, density, area = Population.build_s(sim, pops, counts, verbose) #initial populations     
         Parameters = Model_Parameters(sim, pops, sea, S0, density, area, year_array, counts)
         U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
-
         new(sim.Model,Time, sim.N_ensemble, U0, Parameters)
     end
     
@@ -374,6 +373,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
     K = Vector{Vector{Int16}}(undef,n_pops) #carrying of each group
     ζ = Vector{Vector{Float32}}(undef,n_pops) #latent rate
     γ = Vector{Vector{Float32}}(undef,n_pops) #recovery/death rate
+    
     μ_p = Vector{Vector{Vector{Float32}}}(undef,n_pops) #births/death rate at K
     dummy_μp = Vector{Vector{Float32}}(undef,ny)
 
@@ -414,13 +414,14 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
         g[i] = data.g_fit[1]
 
         K[i] = init_pops[cs[i]+1:cs[i+1]]
-        
-        ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 5) #latent dist
-        γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 5) #r/d rate dist
+    
+  
+        ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 50) #latent dist
+        γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 50) #r/d rate dist
         ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
         λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 365) #corpse decay feral dist
         λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2], 0, 365) #corpse decay farm dist
-        κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 1)
+        κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 365)
         LN_d = TruncatedNormal(data.LN[1], data.LN[2], 0, 5) #number of yearly litters
         LS_d = TruncatedNormal(data.LS[1], data.LS[2], 1, 20) #litter size
         LMH_d = TruncatedNormal(data.LMH[1], data.LMH[2], 0, 1) #litter mortality rate
@@ -433,12 +434,15 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
         κ[i] = rand(κ_d,nt)
         λ[i] = rand(λ_fd,nt)##append!(rand(λ_fd,nf),rand(λ_ld,nl))
         
+
+
         for (ii, vv) in enumerate(ya)
             if vv == 0 # Low year
                 μp = 0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LML_d,nt)) ./ 365
             else # High year
                 μp = 0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LMH_d,nt)) ./ 365
             end
+
             dummy_μp[ii] = μp
         end
     
@@ -464,8 +468,8 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
             end 
 
             df_omega = shuffle(Array(CSV.read(path, DataFrame, header=false)))
-            ω[i] = df_omega[1:nt]
-            
+            #ω[i] = df_omega[1:nt]
+            ω[i] = repeat([df_omega[1]], nt)
         end
 
         if sim.Seasonal

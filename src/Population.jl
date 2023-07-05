@@ -90,7 +90,7 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
             u1 = zeros(Int32,5*Tg) #group pops for Population i
             u1[1:5:end] = S1[n_cs[i]+1:n_cs[i+1]] #assigning our S values
             
-
+            
             if i == n_inf #in seeded population!
                 
                 network_inf = counts.networks[i] #network of infected population (used for accrute seeding)
@@ -157,7 +157,7 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                 end
                 
             end
-
+            
             n_cs_class = n_cs*5
         
             U1[n_cs_class[i]+1:n_cs_class[i+1]] = u1
@@ -382,7 +382,7 @@ function build_s(sim, pops, counts, verbose)
     
     max_density = 100
     max_group_size = 1000000
-    min_group_size = 3
+    min_group_size = 2
     
     if MN == 3
         
