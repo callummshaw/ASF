@@ -165,62 +165,17 @@ end
 
 function convert_homogeneous(input)
     #Function to convert input structure to simple array for M1 and M2
-    params = Vector{Any}(undef,18)
+    
 
-    params[1]  = input.β_o[1][1]
-    params[2]  = input.μ_p[1]
-    params[3]  = input.K[1][1]
-    params[4]  = input.ζ[1][1]
-    params[5]  = input.γ[1][1]
-    params[6]  = input.ω[1][1]
-    params[7]  = input.ρ[1][1]
-    params[8]  = input.λ[1][1]
-    params[9]  = input.κ[1][1]
-    params[10] = input.σ[1]
-    params[11] = input.θ[1]
-    params[12] = input.Seasonal
-    params[13] = input.bw[1]
-    params[14] = input.bo[1]
-    params[15] = input.k[1]
-    params[16] = input.la[1]
-    params[17] = input.lo[1]
-    params[18] = input.area[1]
+    params = (input.β_o[1][1],input.μ_p[1],input.K[1][1],input.ζ[1][1],input.γ[1][1],input.ω[1][1],input.ρ[1][1],input.λ[1][1],input.κ[1][1],input.σ[1],input.θ[1],input.Seasonal,input.bw[1],input.bo[1],input.k[1],input.la[1],input.lo[1],input.area[1])
     
     return params
 end
     
 function convert_heterogeneous(input)
+   
+    params = (input.β_o[1], input.β_i[1],input.μ_p[1],input.K[1],input.ζ[1],input.γ[1],input.ω[1],input.ρ[1],input.λ[1],input.κ[1],input.σ[1],input.g[1],input.bw[1],input.bo[1],input.k[1],input.la[1],input.lo[1],input.area[1],input.Populations.inter_connections[1],input.Populations.networks[1],input.ds1, input.ds2)
     
-    params =  Vector{Any}(undef,22)
-    
-    params[1]  = input.β_o[1] #inter
-    params[2]  = input.β_i[1] #intra
-    
-    params[3]  = input.μ_p[1]
-    params[4]  = input.K[1]
-    params[5]  = input.ζ[1]
-    params[6]  = input.γ[1]
-    params[7]  = input.ω[1]
-    params[8] = input.ρ[1]
-    params[9] = input.λ[1]
-    params[10] = input.κ[1]
-    
-    params[11] = input.σ[1]
-    params[12] = input.g[1]
-
-    params[13] = input.bw[1]
-    params[14] = input.bo[1]
-    params[15] = input.k[1]
-    params[16] = input.la[1]
-    params[17] = input.lo[1]
-    
-    params[18] = input.area[1]
-    params[19] = input.Populations.inter_connections[1]
-    params[20] = input.Populations.networks[1]
-    
-    params[21] = input.ds1
-    params[22] = input.ds2
-            
     return params
 end
 

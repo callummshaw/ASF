@@ -189,7 +189,7 @@ function burn_m3_single(sim,S0, PP)
     
     μ = mean(PP.μ_p[1][end]) #taking value from last year!
     k = birthpulse_norm(PP.bw[1], μ)
-    params = [μ, PP.K[1], 0, PP.g[1], PP.bw[1], PP.bo[1], k, PP.Populations.networks[1]]
+    params = (μ, PP.K[1], 0, PP.g[1], PP.bw[1], PP.bo[1], k, PP.Populations.networks[1])
     
     rj_burn = RegularJump(asf_model_burn_multi, regular_c, eqs*NG)
     prob_burn = DiscreteProblem(S0,tspan,params)
@@ -234,7 +234,7 @@ function burn_m1m2(sim,U0, PP)
     ny = 10 #will allow for 10 years spinup time
     tspan = (0.0,ny*365+sim.S_day)
 #taking value from last year!
-    params = [PP.μ_p[1][end][1],PP.K[1][1],0,PP.bw[1],PP.bo[1], PP.k[1][end]] #\simga = 0 allows for faster return to correct K!
+    params = (PP.μ_p[1][end][1],PP.K[1][1],0,PP.bw[1],PP.bo[1], PP.k[1][end]) #\simga = 0 allows for faster return to correct K!
      #only need to run on S, so can not use others!
     prob_ode = ODEProblem(asf_model_burn_single, U0, tspan,params)
     sol = solve(prob_ode, saveat = ny*365+sim.S_day,reltol=1e-8)
