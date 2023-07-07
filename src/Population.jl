@@ -51,13 +51,13 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
         p_i = data.N_i[1]/100 #percentage of K that are infected!
         
         
-        if (p_e + p_i) > 1
-            if verbose
-                @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
-            end
-                p_e = 0.01
-                p_i = 0.01
-        end
+        #if (p_e + p_i) > 1
+         #   if verbose
+          #      @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
+          #  end
+           #     p_e = 0.01
+            #    p_i = 0.01
+        #end
         
         ne = round(K*p_e)
         ni = round(K*p_i)
@@ -103,16 +103,16 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                 
                 p_ei = p_e + p_i
                 
-                if p_ei > 1
-                    if verbose
-                        @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
-                    end
-                    p_e = 0.01
-                    p_i = 0.01
-                    p_ei = p_e + p_i 
-                end
+                #if p_ei > 1
+                 #   if verbose
+                  #      @warn "Over 100% of Population Infected or Exposed! Setting to 1% each!" 
+                   # end
+                    #p_e = 0.01
+                    #p_i = 0.01
+                    #p_ei = p_e + p_i 
+                #end
                 
-                n_groups = trunc(Int8,Tg*p_i)
+                n_groups = trunc(Int8,data.N_e[1])
 
                 if verbose
                     @info "Seeding ASF in  $n_groups groups"
@@ -120,7 +120,6 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                 
 
                 si = counts.cum_sum[i] #start index of pop
-                ei = counts.cum_sum[i+1] #end index of pop
 
                 seeded_groups = 0
                

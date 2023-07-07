@@ -10,16 +10,16 @@ Feral_size,3.8,1.6
 Boar,0.4,0
 #Number of interconnection for groups within population
 N_int,6,0
-#Exposed population proportion in seeded populations 
+#Exposed population proportion in seeded populations (%) 
 Exp_p,5,0
-#Infected population proportion in seeded populations
+#Infected population proportion in seeded populations (%)
 Inf_pi,5,0
 #Litters per year
 Litter_n,0.84,0
 #Litter Size
 Litter_s,6.6,1.15
 #First year mortality rate high (low rain year)
-Litter_mu_h,0.85,0.05
+Litter_mu_h,0.95,0.05
 #First year mortality rate low (high rain year)
 Litter_mu_l,0.9,0.05
 #Percent of natural birth/death rates that are NOT dependent on population density
