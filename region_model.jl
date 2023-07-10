@@ -28,25 +28,49 @@ end
 network = grid([4])
 
 println("250")
-simulate_region("Inputs/one250/ACT/",1, network, "../Desktop/ASF_Output/ACT/250/One/")
+simulate_region("Inputs/one250/NSW/",1, network, "Output/NSW/250/One/")
 
 println("1000")
-simulate_region("Inputs/one1000/ACT/",1, network, "../Desktop/ASF_Output/ACT/1000/One/")
+simulate_region("Inputs/one1000/NSW/",1, network, "Output/NSW/1000/One/")
 
 println("4000")
-simulate_region("Inputs/one4000/ACT/",1, network, "../Desktop/ASF_Output/ACT/4000/One/")
+simulate_region("Inputs/one4000/NSW/",1, network, "Output/NSW/4000/One/")
 
 println("4000: 4x1000 Grid")
-simulate_region("Inputs/four4000/ACT/",4, network, "../Desktop/ASF_Output/ACT/4000/Grid_4/")
+simulate_region("Inputs/four4000/NSW/",4, network, "Output/NSW/4000/Grid_4/")
 
 println("4000: 4x1000 Line")
 network = path_graph(4)
-simulate_region("Inputs/four4000/ACT/",4, network, "../Desktop/ASF_Output/ACT/4000/Line_4/")
+simulate_region("Inputs/four4000/NSW/",4, network, "Output/NSW/4000/Line_4/")
 
 println("4000: 4x1000 Grid")
 network = grid([16])
-simulate_region("Inputs/sixteen4000/ACT/",4, network, "../Desktop/ASF_Output/ACT/4000/Grid_16/")
+simulate_region("Inputs/sixteen4000/NSW/",4, network, "Output/NSW/4000/Grid_16/")
 
 println("4000: 4x1000 Line")
 network = path_graph(16)
-simulate_region("Inputs/sixteen4000/ACT/",4, network, "../Desktop/ASF_Output/ACT/4000/Line_16/")
+simulate_region("Inputs/sixteen4000/NSW/",4, network, "Output/NSW/4000/Line_16/")
+
+println("250")
+simulate_region("Inputs/one250/NT/",1, network, "Output/NT/250/One/")
+
+println("1000")
+simulate_region("Inputs/one1000/NT/",1, network, "Output/NT/1000/One/")
+
+println("4000")
+simulate_region("Inputs/one4000/NT/",1, network, "Output/NT/4000/One/")
+
+println("4000: 4x1000 Grid")
+simulate_region("Inputs/four4000/NT/",4, network, "Output/NT/4000/Grid_4/")
+
+println("4000: 4x1000 Line")
+network = path_graph(4)
+simulate_region("Inputs/four4000/NT/",4, network, "Output/NT/4000/Line_4/")
+
+println("4000: 4x1000 Grid")
+network = grid([16])
+simulate_region("Inputs/sixteen4000/NT/",4, network, "Output/NT/4000/Grid_16/")
+
+println("4000: 4x1000 Line")
+network = path_graph(16)
+simulate_region("Inputs/sixteen4000/NT/",4, network, "Output/NT/4000/Line_16/")
