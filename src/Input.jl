@@ -144,7 +144,7 @@ struct Population_Data <: Data_Input
     B_fl::Vector{Float64} #farm-feral transmission
     Decay_l::Vector{Float64} #decay farm
     
-    function Population_Data(input, sim, verbose)
+    function Population_Data(input, sim, verbose,fym)
         
         #Feral/General Params
         
@@ -158,8 +158,8 @@ struct Population_Data <: Data_Input
         
         LN = [input.Mean[8],input.STD[8]] #number of litters
         LS = [input.Mean[9],input.STD[9]] #litter size
-        LMH = [input.Mean[10],input.STD[10]] #first year mortality high
-        LML = [input.Mean[11],input.STD[11]] #first year mortality low
+        LMH = [fym,input.STD[10]] #first year mortality high
+        LML = [fym,input.STD[11]] #first year mortality low
 
         Dr = [input.Mean[12],input.STD[12]] #density rate
         Dp = [input.Mean[13],input.STD[13]] #density power
@@ -327,9 +327,9 @@ struct Model_Data
     Parameters::Model_Parameters #Model parameters
     #Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path, pop_net, year_array; verbose = false)
+    function Model_Data(Path, pop_net, year_array,fym; verbose = false)
         #custom_network parameter used for fitting!
-        sim, pops, sea = read_inputs(Path, verbose)
+        sim, pops, sea = read_inputs(Path, verbose,fym)
         Time = (sim.S_day,sim.years*365+sim.S_day)
         #now building feral pig network
         counts = Network.build(sim, pops, verbose, pop_net) 
@@ -501,7 +501,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
     
 end
 
-function read_inputs(path, verbose)
+function read_inputs(path, verbose,fym)
     #=
     Function to read in the data for the tau simulation. Expecting a file for simulation meta data, 
     a folder with population data and another folder with seasonal data
@@ -525,7 +525,7 @@ function read_inputs(path, verbose)
     
     for i in 1:N_P_files
         pop_data = CSV.read("$(path)/Population/Population_$(i).csv", DataFrame; comment="#") 
-        Pops[i] = Population_Data(pop_data, Sim, verbose)
+        Pops[i] = Population_Data(pop_data, Sim, verbose,fym)
 
         if Sim.Seasonal
             seasonal_data = CSV.read("$(path)/Seasonal/Seasonal_$(i).csv", DataFrame; comment="#")

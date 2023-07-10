@@ -22,10 +22,10 @@ include("Input.jl") #the input
 include("Analyse.jl") #some simple analysis
 
 
-function Model_sim(input_path; pop_net = 0, year_array = 0)
+function Model_sim(input_path; pop_net = 0, year_array = 0, fym = 0.95)
     #wrapper function to run ASF models!
 
-    input = Input.Model_Data(input_path, pop_net, year_array, verbose = false); #all input data!
+    input = Input.Model_Data(input_path, pop_net, year_array, fym, verbose = false); #all input data!
 
     n_sims  = input.NR
     n_pops = input.Parameters.Populations.pop
@@ -106,7 +106,7 @@ function Model_sim(input_path; pop_net = 0, year_array = 0)
         end
 
         function prob_func(prob, i, repeat)
-            input_new =  Input.Model_Data(input_path, pop_net, year_array, verbose = false)
+            input_new =  Input.Model_Data(input_path, pop_net, year_array, fym, verbose = false)
             
             if MN == 2
                 pn = convert_homogeneous(input_new.Parameters)
