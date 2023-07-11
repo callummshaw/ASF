@@ -8,6 +8,7 @@ using DifferentialEquations
 using LinearAlgebra
 using SparseArrays 
 using QuadGK
+using Plots
 
 export burn_population
 export build_s
@@ -185,10 +186,8 @@ function burn_m3_single(sim,S0, PP)
         mul!(du,dc,counts)
         nothing
     end
-    
-    μ = mean(PP.μ_p[1][end]) #taking value from last year!
-    k = birthpulse_norm(PP.bw[1], μ)
-    params = (μ, PP.K[1], 0, PP.g[1], PP.bw[1], PP.bo[1], k, PP.Populations.networks[1])
+  
+    params = (PP.μ_p[1][end], PP.K[1], 0, PP.g[1], PP.bw[1], PP.bo[1], PP.k[1][end], PP.Populations.networks[1])
     
     rj_burn = RegularJump(asf_model_burn_multi, regular_c, eqs*NG)
     prob_burn = DiscreteProblem(S0,tspan,params)
@@ -217,7 +216,7 @@ function burn_m3_full(sim,S0, PP)
         mul!(du,dc,counts)
         nothing
     end
-  
+
     rj_burn = RegularJump(asf_model_burn_multi_full, regular_c, eqs*NG)
     prob_burn = DiscreteProblem(S0,tspan,PP)
     jump_prob_burn = JumpProblem(prob_burn, Direct(), rj_burn)    
@@ -258,7 +257,13 @@ function asf_model_burn_multi(out,u,p,t)
     μ_p, K, σ, g, bw, bo, k, pop_con  = p 
     
     u[u.<0] .= 0
-    
+
+    iii = maximum(u)
+
+    if iii > 100
+        println("Uh Oh")
+    end
+
     tg = length(u)
     
     p_mag = birth_pulse_vector(t,k,bw,bo)
@@ -267,9 +272,10 @@ function asf_model_burn_multi(out,u,p,t)
    
     #now stopping and transferring boar births
     mask_boar = (K .== 1) .& (u .> 0) #boars with a positive population
-    boar_births = p_mag*sum(mask_boar)
+    boar_births = sum(p_mag .* mask_boar)
     Births[mask_boar] .= 0
     mask_p_s = (u .> 1) .& (K .> 1) #moving it to postive 
+ 
     Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
     
     #now allowing for inter group migration births
@@ -305,24 +311,31 @@ function asf_model_burn_multi_full(out,u,p,t)
     u[u.<0] .= 0
    
     pop_data = p.Populations
- 
+
+    iii = maximum(u)
+
+    if iii > 100
+        println("Uh Oh")
+    end
+
     for i in 1:pop_data.pop #looping through populations!
         
         si = pop_data.cum_sum[i]+1 #start index of pop
         ei = pop_data.cum_sum[i+1] #end index of pop
 
-        S = Vector{UInt8}(u[si:ei]) #population we want!
-
+        S = Vector{UInt8}(u[si:ei])
+       
         K = p.K[i]
-        
+
         tg = length(S) #total groups in all populations
+        tp = sum(S) # total living pigs
         
-        p_mag = @. p.k[i][end]*exp(-p.bw[i]*cos(pi*(t+p.bo[i])/365)^2) #birth pulse value at time t
-        Births = @. p_mag*(0.75 * S + ((0.25)) * sqrt(S) * sqrt(K))#total! (rate times NP)
+        p_mag =  birth_pulse_vector(t,p.k[i][end],p.bw[i],p.bo[i])#birth pulse value at time t
+        Births = @. p_mag*(0.75 * S + 0.25 * sqrt(S)*sqrt(K))#total! (rate times NP)
 
         #now stopping boar births
         mask_boar = (K .== 1) .& (S .> 0) #boars with a positive population
-        boar_births = p_mag*sum(mask_boar)
+        boar_births = sum(p_mag .* mask_boar)
         Births[mask_boar] .= 0
         mask_p_s = (S .> 1) .& (K .> 1) #moving it to postive sow groups with at least 2 pigs
         Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
@@ -331,34 +344,34 @@ function asf_model_burn_multi_full(out,u,p,t)
         
         if n_empty/tg > 0.01   #migration births (filling dead nodes if there is a connecting group with 2 or more pigs)
             
-        connections = shuffle(pop_data.inter_connections[i])
+            n_r = (n_empty/tg)^2 #squared to reduce intesity
 
-        for i in eachrow(connections)
-            g1 = i[1]
-            g2 = i[2]
+            dd = copy(S)
+            dd[dd .< 2] .= 0
+            connected_pops = pop_data.networks[i] * dd
 
-            if (S[g1] > 2) & (S[g2] == 0) & (Births[g1] > p_mag) #g1 to g2 
-                Births[g1] -= p_mag
-                Births[g2] += p_mag
-            elseif (S[g2] > 2) & (S[g1] == 0) & (Births[g2] > p_mag) #g2 to g1
-                Births[g2] -= p_mag
-                Births[g1] += p_mag
-            end
-        end     
+            #Groups with 3 or more pigs can have emigration
+            mask_em =  (dd .> 0) #populations that will have emigration
+
+            em_force = sum(Births[mask_em]) #"extra" births in these populations that we will transfer
+
+            mask_im = (S .== 0) .& (connected_pops .> 1) #population zero but connected groups have 5 or more pigs
+
+            Births[mask_em] .*= n_r
+            Births[mask_im] .= (1 - n_r)*em_force/sum(mask_im)
 
         end 
-      
-        out[2*(si-1)+1:2:2*ei] .= Births
-        out[2*(si-1)+2:2:2*ei] .=  @. S *  p.μ_p[i][end]*(0.75 + ((0.25))*sqrt(S/K))*p.g[i] #rate
-       
-    end
 
-    nothing
+        out[2*(si-1)+1:2:2*ei] .= Births
+        out[2*(si-1)+2:2:2*ei] .=  @. S * p.μ_p[i][end]*(0.75 + 0.25*sqrt(S/K))*p.g[i] #rate #rate
+            
+    end 
+
 end
 
 function birth_pulse_vector(t,k,s,p)
     #birth pulse not for a vector
-    return k*exp(-s*cos(pi*(t+p)/365)^2)
+    return k .* exp.(-s.*cos.(pi.*(t.+p)./365).^2)
 end
 
 function build_s(sim, pops, counts, verbose)

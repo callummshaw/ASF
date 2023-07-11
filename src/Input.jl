@@ -144,7 +144,7 @@ struct Population_Data <: Data_Input
     B_fl::Vector{Float64} #farm-feral transmission
     Decay_l::Vector{Float64} #decay farm
     
-    function Population_Data(input, sim, verbose,fym)
+    function Population_Data(input, sim, verbose)
         
         #Feral/General Params
         
@@ -158,8 +158,8 @@ struct Population_Data <: Data_Input
         
         LN = [input.Mean[8],input.STD[8]] #number of litters
         LS = [input.Mean[9],input.STD[9]] #litter size
-        LMH = [fym,input.STD[10]] #first year mortality high
-        LML = [fym,input.STD[11]] #first year mortality low
+        LMH = [input.Mean[10],input.STD[10]] #first year mortality high
+        LML = [input.Mean[11],input.STD[11]] #first year mortality low
 
         Dr = [input.Mean[12],input.STD[12]] #density rate
         Dp = [input.Mean[13],input.STD[13]] #density power
@@ -293,7 +293,7 @@ struct Model_Parameters
 
     bw::Vector{Float32}
     bo::Vector{UInt16} 
-    k::Vector{Vector{Float32}} 
+    k::Vector{Vector{Vector{Float32}}} 
     la::Vector{Float32}
     lo::Vector{UInt16}
   
@@ -305,11 +305,11 @@ struct Model_Parameters
     ds1::Vector{UInt16}
     ds2::Vector{UInt16}
     
-    function Model_Parameters(sim, pops, sea, U0, density, area,ya, Populations)
+    function Model_Parameters(sim, pops, sea, U0, density, area,ya, Populations,fym)
         
         β_o, β_i = Beta.construction(sim, pops, Populations)
 
-        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo, ds1, ds2  = parameter_build(sim, pops, sea, U0,ya, Populations)
+        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo, ds1, ds2  = parameter_build(sim, pops, sea, U0,ya, Populations,fym)
 
         new(β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, density, area, Populations, ds1, ds2)
     end
@@ -329,14 +329,14 @@ struct Model_Data
 
     function Model_Data(Path, pop_net, year_array,fym; verbose = false)
         #custom_network parameter used for fitting!
-        sim, pops, sea = read_inputs(Path, verbose,fym)
+        sim, pops, sea = read_inputs(Path, verbose)
         Time = (sim.S_day,sim.years*365+sim.S_day)
         #now building feral pig network
         counts = Network.build(sim, pops, verbose, pop_net) 
 
         #Now using network to build init pops
         S0, density, area = Population.build_s(sim, pops, counts, verbose) #initial populations     
-        Parameters = Model_Parameters(sim, pops, sea, S0, density, area, year_array, counts)
+        Parameters = Model_Parameters(sim, pops, sea, S0, density, area, year_array, counts,fym)
         U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
         new(sim.Model,Time, sim.N_ensemble, U0, Parameters)
     end
@@ -351,7 +351,7 @@ function day_to_rate(Mean, STD)
     return [mean_rate, std_rate]
 end
 
-function parameter_build(sim, pops, sea, init_pops,ya, counts)
+function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
     #=
     Function that builds most parameters for model
     =# 
@@ -390,7 +390,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
     bw = Vector{Float32}(undef, n_pops)
     bo = Vector{Float32}(undef, n_pops)
 
-    k = Vector{Vector{Float32}}(undef, n_pops)
+    k = Vector{Vector{Vector{Float32}}}(undef, n_pops)
 
     la = Vector{Float32}(undef, n_pops)
     lo = Vector{Float32}(undef, n_pops)
@@ -422,11 +422,10 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
         λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 365) #corpse decay feral dist
         λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2], 0, 365) #corpse decay farm dist
         κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 365)
-        LN_d = TruncatedNormal(data.LN[1], data.LN[2], 0, 5) #number of yearly litters
-        LS_d = TruncatedNormal(data.LS[1], data.LS[2], 1, 20) #litter size
-        LMH_d = TruncatedNormal(data.LMH[1], data.LMH[2], 0, 1) #litter mortality rate
-        
-        LML_d = TruncatedNormal(data.LML[1], data.LML[2], 0, 1) #litter mortality rate
+        LN_d = TruncatedNormal(data.LN[1], 0, 0, 5) #number of yearly litters
+        LS_d = TruncatedNormal(data.LS[1], 0, 1, 20) #litter size
+        LMH_d = TruncatedNormal(fym, data.LMH[2], 0, 1) #litter mortality rate
+        LML_d = TruncatedNormal(fym, data.LML[2], 0, 1) #litter mortality rate
         
         ζ[i] = rand(ζ_d,nt)
         γ[i] = rand(γ_d,nt)
@@ -447,6 +446,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
         end
     
         μ_p[i] = dummy_μp
+
         if !sim.Fitted
             
             ω_d = TruncatedNormal(data.Corpse[1], data.Corpse[2], 0, 1) #corpse inf dist
@@ -479,10 +479,12 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
             la[i] = data_s.Decay_amp #DM
             lo[i] = data_s.Decay_offset
 
-            dummy_k = zeros(Float32,ny)
+            dummy_k = Vector{Vector{Float32}}(undef,ny)
+            
             for ii in 1:ny 
-                dummy_k[ii] = birthpulse_norm(data_s.Birth_width, mean(μ_p[i][ii]))
+                dummy_k[ii] = birthpulse_norm(data_s.Birth_width, μ_p[i][ii])
             end
+
             k[i] = dummy_k
             
         else
@@ -501,7 +503,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts)
     
 end
 
-function read_inputs(path, verbose,fym)
+function read_inputs(path, verbose)
     #=
     Function to read in the data for the tau simulation. Expecting a file for simulation meta data, 
     a folder with population data and another folder with seasonal data
@@ -525,7 +527,7 @@ function read_inputs(path, verbose,fym)
     
     for i in 1:N_P_files
         pop_data = CSV.read("$(path)/Population/Population_$(i).csv", DataFrame; comment="#") 
-        Pops[i] = Population_Data(pop_data, Sim, verbose,fym)
+        Pops[i] = Population_Data(pop_data, Sim, verbose)
 
         if Sim.Seasonal
             seasonal_data = CSV.read("$(path)/Seasonal/Seasonal_$(i).csv", DataFrame; comment="#")
@@ -541,7 +543,7 @@ end
 function birthpulse_norm(s, DT)
    
     integral, err = quadgk(x -> exp(-s*cos(pi*x/year)^2), 1, year, rtol=1e-8);
-    k = (year*DT)/integral 
+    k = (year.*DT) ./ integral 
     
     return k
 end

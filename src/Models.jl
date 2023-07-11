@@ -58,7 +58,7 @@ function ASF_M3_full(out,u,p,t)
 
         #now stopping boar births
         mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
-        boar_births = p_mag*sum(mask_boar)
+        boar_births = sum(p_mag .* mask_boar)
         Births[mask_boar] .= 0
         mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive sow groups with at least 2 pigs
         Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
@@ -194,7 +194,7 @@ function ASF_M3_single(out,u,p,t)
 
     #now stopping boar births
     mask_boar = (K .== 1) .& (Np .> 0) #boars with a positive population
-    boar_births = p_mag*sum(mask_boar)
+    boar_births = sum(p_mag .* mask_boar)
     Births[mask_boar] .= 0
     mask_p_s = (Np .> 1) .& (K .> 1) #moving it to postive sow groups with at least 2 pigs
     Births[mask_p_s] .+= boar_births ./ sum(mask_p_s) 
@@ -351,7 +351,7 @@ end
 
 function birth_pulse_vector(t,k,s,p)
     #birth pulse not for a vector
-    return k*exp(-s*cos(pi*(t+p)/365)^2)
+    return k .* exp(-s*cos(pi*(t+p)/365)^2)
 end
 
 end

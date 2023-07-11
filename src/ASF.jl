@@ -97,8 +97,11 @@ function Model_sim(input_path; pop_net = 0, year_array = 0, fym = 0.95)
                 r_d = sum(data[:,5*s0+4:5:5*ei],dims=2)
                 c_d = sum(data[:,5*s0+5:5:5*ei],dims=2)
    
-                dd[i] = vec(e_d +i_d + c_d)
-                fd[i] = vec(s_d + r_d)
+                dis = vec(e_d +i_d + c_d)
+                free_dis = vec(s_d + r_d)
+                
+                dd[i] = dis[1:7:end] #weekly output
+                fd[i] = free_dis[1:7:end]
             end
             
             ([dd,fd], false)
