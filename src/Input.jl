@@ -333,7 +333,7 @@ struct Model_Data
         Time = (sim.S_day,sim.years*365+sim.S_day)
         #now building feral pig network
         counts = Network.build(sim, pops, verbose, pop_net) 
-
+    
         #Now using network to build init pops
         S0, density, area = Population.build_s(sim, pops, counts, verbose) #initial populations     
         Parameters = Model_Parameters(sim, pops, sea, S0, density, area, year_array, counts,fym)
@@ -375,8 +375,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
     γ = Vector{Vector{Float32}}(undef,n_pops) #recovery/death rate
     
     μ_p = Vector{Vector{Vector{Float32}}}(undef,n_pops) #births/death rate at K
-    dummy_μp = Vector{Vector{Float32}}(undef,ny)
-
+    
     ω = Vector{Vector{Float32}}(undef,n_pops) #corpse infection modifier
     ρ = Vector{Vector{Float32}}(undef,n_pops) #ASF mortality
     λ = Vector{Vector{Float32}}(undef,n_pops) #corpse decay rate
@@ -400,6 +399,9 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
     
     for i in 1:n_pops
 
+        dummy_μp = Vector{Vector{Float32}}(undef,ny)
+        dummy_k = Vector{Vector{Float32}}(undef,ny)
+
         j = (i-1) ÷ n_p + 1
         
         data =  pops[j]
@@ -422,8 +424,8 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
         λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 365) #corpse decay feral dist
         λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2], 0, 365) #corpse decay farm dist
         κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 365)
-        LN_d = TruncatedNormal(data.LN[1], 0, 0, 5) #number of yearly litters
-        LS_d = TruncatedNormal(data.LS[1], 0, 1, 20) #litter size
+        LN_d = TruncatedNormal(data.LN[1], data.LN[2], 0, 5) #number of yearly litters
+        LS_d = TruncatedNormal(data.LS[1], data.LS[2], 1, 20) #litter size
         LMH_d = TruncatedNormal(fym, data.LMH[2], 0, 1) #litter mortality rate
         LML_d = TruncatedNormal(fym, data.LML[2], 0, 1) #litter mortality rate
         
@@ -441,10 +443,13 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
             else # High year
                 μp = 0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LMH_d,nt)) ./ 365
             end
-
+            
+            dummy_k[ii] = birthpulse_norm(0.8, μp)
             dummy_μp[ii] = μp
+
         end
     
+        k[i] = dummy_k  
         μ_p[i] = dummy_μp
 
         if !sim.Fitted
@@ -472,30 +477,12 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
             ω[i] = repeat([df_omega[1]], nt)
         end
 
-        if sim.Seasonal
+        
 
-            bw[i] = data_s.Birth_width
-            bo[i] = data_s.Birth_offset
-            la[i] = data_s.Decay_amp #DM
-            lo[i] = data_s.Decay_offset
-
-            dummy_k = Vector{Vector{Float32}}(undef,ny)
-            
-            for ii in 1:ny 
-                dummy_k[ii] = birthpulse_norm(data_s.Birth_width, μ_p[i][ii])
-            end
-
-            k[i] = dummy_k
-            
-        else
-
-            bw[i] = 0
-            bo[i] = 0
-            k[i]  = 0
-            la[i] = 0
-            lo[i] = 0
-
-        end
+        bw[i] = data_s.Birth_width
+        bo[i] = data_s.Birth_offset
+        la[i] = data_s.Decay_amp #DM
+        lo[i] = data_s.Decay_offset
         
     end
 

@@ -199,7 +199,7 @@ function burn_m3_single(sim,S0, PP)
     return S1
 end
 
-function burn_m3_full(sim,S0, PP)
+function burn_m3_full(sim,S0, p)
 
     ny = 5 #will allow for 5 years spinup time
     tspan = (0.0,ny*365+sim.S_day)
@@ -217,8 +217,10 @@ function burn_m3_full(sim,S0, PP)
         nothing
     end
 
+    params = (p.μ_p, p.K, p.g, p.bw, p.bo, p.k, p.Populations)
+
     rj_burn = RegularJump(asf_model_burn_multi_full, regular_c, eqs*NG)
-    prob_burn = DiscreteProblem(S0,tspan,PP)
+    prob_burn = DiscreteProblem(S0,tspan,params)
     jump_prob_burn = JumpProblem(prob_burn, Direct(), rj_burn)    
     sol_burn = solve(jump_prob_burn, SimpleTauLeaping(),dt=1);
 
@@ -306,31 +308,24 @@ end
 
 function asf_model_burn_multi_full(out,u,p,t)
 
-    year = 365 #days in a year
-
     u[u.<0] .= 0
    
-    pop_data = p.Populations
-
-    iii = maximum(u)
-
-    if iii > 100
-        println("Uh Oh")
-    end
+    μ_p, Kb, g, bw, bo, k, pop_data = p
 
     for i in 1:pop_data.pop #looping through populations!
-        
+        K = Kb[i]
         si = pop_data.cum_sum[i]+1 #start index of pop
         ei = pop_data.cum_sum[i+1] #end index of pop
 
-        S = Vector{UInt8}(u[si:ei])
-       
-        K = p.K[i]
+        iii = maximum(u[si:ei])
 
+        if iii > 100
+            println("$(i) Uh Oh")
+        end
+        S = Vector{UInt8}(u[si:ei])
         tg = length(S) #total groups in all populations
-        tp = sum(S) # total living pigs
-        
-        p_mag =  birth_pulse_vector(t,p.k[i][end],p.bw[i],p.bo[i])#birth pulse value at time t
+
+        p_mag =  birth_pulse_vector(t,k[i][end],bw[i],bo[i])#birth pulse value at time t
         Births = @. p_mag*(0.75 * S + 0.25 * sqrt(S)*sqrt(K))#total! (rate times NP)
 
         #now stopping boar births
@@ -363,7 +358,7 @@ function asf_model_burn_multi_full(out,u,p,t)
         end 
 
         out[2*(si-1)+1:2:2*ei] .= Births
-        out[2*(si-1)+2:2:2*ei] .=  @. S * p.μ_p[i][end]*(0.75 + 0.25*sqrt(S/K))*p.g[i] #rate #rate
+        out[2*(si-1)+2:2:2*ei] .=  @. S * μ_p[i][end]*(0.75 + 0.25*sqrt(S/K))*g[i] #rate #rate
             
     end 
 
@@ -371,7 +366,7 @@ end
 
 function birth_pulse_vector(t,k,s,p)
     #birth pulse not for a vector
-    return k .* exp.(-s.*cos.(pi.*(t.+p)./365).^2)
+    return k .* exp(-s*cos(pi*(t.+p)/365)^2)
 end
 
 function build_s(sim, pops, counts, verbose)
