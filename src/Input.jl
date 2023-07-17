@@ -417,7 +417,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
 
         K[i] = init_pops[cs[i]+1:cs[i+1]]
     
-  
+        
         ζ_d = TruncatedNormal(data.Latent[1], data.Latent[2], 0, 50) #latent dist
         γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 50) #r/d rate dist
         ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
@@ -444,7 +444,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
                 μp = 0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LMH_d,nt)) ./ 365
             end
             
-            dummy_k[ii] = birthpulse_norm(0.8, μp)
+            dummy_k[ii] = birthpulse_norm(data_s.Birth_width, μp)
             dummy_μp[ii] = μp
 
         end
