@@ -26,7 +26,7 @@ function Model_sim(input_path; pop_net = 0, year_array = 0, fym = 0.95)
     #wrapper function to run ASF models!
 
     input = Input.Model_Data(input_path, pop_net, year_array, fym, verbose = false); #all input data!
-    n_sims  = input.NR
+    n_sims  = 1000#input.NR
     n_pops = input.Parameters.Populations.pop
     groups_per_pop = input.Parameters.Populations.cum_sum
     MN = input.MN
@@ -108,6 +108,7 @@ function Model_sim(input_path; pop_net = 0, year_array = 0, fym = 0.95)
         end
 
         function prob_func(prob, i, repeat)
+            
             input_new =  Input.Model_Data(input_path, pop_net, year_array, fym, verbose = false)
             
             if MN == 2
@@ -118,6 +119,11 @@ function Model_sim(input_path; pop_net = 0, year_array = 0, fym = 0.95)
                 else 
                     pn = input_new.Parameters
                 end
+            end
+            AAA = sum(input_new.U0[2:5:end]+input_new.U0[3:5:end])
+       
+            if AAA == 0
+                println("Warning no infected being seeded!!!")
             end
 
             remake(prob, u0 = input_new.U0, p = pn)
@@ -145,7 +151,7 @@ function Model_sim(input_path; pop_net = 0, year_array = 0, fym = 0.95)
             end
 
         end
-        
+      
         prob = DiscreteProblem(input.U0,input.Time, P)#hetero_single_test(input.Parameters))
         jump_prob = JumpProblem(prob,Direct(),rj)
 

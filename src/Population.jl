@@ -99,8 +99,8 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                 j = (i-1) ÷ n_p + 1
                 data =  pops[j]
 
-                p_e = data.N_e[1]/100 #percentage of K that are exposed!
-                p_i = data.N_i[1]/100 #percentage of K that are infected!
+                p_e = data.N_e[1] #percentage of K that are exposed!
+                p_i = data.N_i[1] #percentage of K that are infected!
                 
                 p_ei = p_e + p_i
                 
@@ -113,7 +113,7 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                     #p_ei = p_e + p_i 
                 #end
                 
-                n_groups = trunc(Int8,data.N_e[1])
+                n_groups = 5#trunc(Int8,data.N_e[1])
 
                 if verbose
                     @info "Seeding ASF in  $n_groups groups"
@@ -127,19 +127,22 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                 while seeded_groups == 0 
                     seeded_groups = find_nodes(network_inf,n_groups) #groups we are seeding ASF in
                 end
+                if length(seeded_groups) == 0
+                    println("Warning Warning")
+                end
 
                 for j in seeded_groups
+
                     ki= K[i]
                     
                     g_p = ki[j] #group carrying capacity
                     
-                    init_pop = S1[j + si]
                     ra = j -1 #needed for indexing!
                    
                     if g_p > 1 #sow population! (Asumming whole population infected or exposed!)
                         
-                        e_pop = trunc(Int16, init_pop*p_e/p_ei)
-                        i_pop = init_pop - e_pop
+                        e_pop = trunc(Int16, g_p*p_e/p_ei)
+                        i_pop = g_p - e_pop
 
                         u1[ra*5+1] = 0 #S=0
                         u1[ra*5+2] = e_pop
@@ -147,8 +150,8 @@ function seed_ASF(sim,pops, Parameters, S1, verbose)
                     else #boars!
                         e_prob = rand(1)[1] > p_e/p_ei #if it is E
                         if e_prob #seeded in e
-                            u1[ra*5+1] = 1
-                            u1[ra*5+3] = 0
+                            u1[ra*5+1] = 0
+                            u1[ra*5+2] = 1
                         else #seeded in i
                             u1[ra*5+1] = 0
                             u1[ra*5+3] = 1
