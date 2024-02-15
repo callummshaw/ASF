@@ -26,7 +26,7 @@ function Model_sim(input_path; pop_net = 0, year_array = 0, fym = 0.95)
     #wrapper function to run ASF models!
 
     input = Input.Model_Data(input_path, pop_net, year_array, fym, verbose = false); #all input data!
-    n_sims  = 1000#input.NR
+    n_sims  = 100#input.NR
     n_pops = input.Parameters.Populations.pop
     groups_per_pop = input.Parameters.Populations.cum_sum
     MN = input.MN
