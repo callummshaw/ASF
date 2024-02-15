@@ -2,43 +2,30 @@ using ASF
 using JLD2
 using Graphs
 
-function simulate_region(ip, np, net, save)
+#Here is a sample file to demonstrate how the ASF is best run
 
-	fymort = [0.95]
+function simulate_region(ip, net, save)
+    """
+    Function to run model and save output to desired directory
 
-    for i in fymort
-        println(i)
-        if np == 1
-            sim_output = Model_sim(ip, fym = i)
-        else
-            sim_output = Model_sim(ip, pop_net = net, fym = i)
-        end
-        
-        if i == 0.5
-            save_object(save*"Low"*"/out.jdl2",sim_output.u)
-        elseif i == 0.8
-            save_object(save*"Regular"*"/out.jdl2",sim_output.u)
-        else
-            save_object(save*"High"*"/out.jdl2",sim_output.u)
-        end
-    end
-
+    ip is the input directory (directory with input parameters, examples provided in Inputs/)
+    
+    net is the metapopulation structure we will run on, takes Graphs inputs (given some examples below, if 1 population is desired specify in inputs and will ignore this param)
+    
+    save is the path to the save directory
+    """
+	
+    sim_output = Model_sim(ip, pop_net = net)
+    save_object(save*"/out.jdl2",sim_output.u)
+    
 end
 
-
-println("NSW")  
-network = grid([2,2])
-println("4000: 4x1000 Grid")
-simulate_region("Inputs/four4000/NT/",4, network, "/home/callum/Desktop/ASF_Output/NT_Small/4000/Grid_4/")
-
-println("4000: 4x1000 Line")
-network = path_graph(4)
-simulate_region("Inputs/four4000/NT/",4, network, "/home/callum/Desktop/ASF_Output/NT_Small/4000/Line_4/")
-
-println("4000: 16x250 Grid")
-network = grid([4,4])
-simulate_region("Inputs/sixteen4000/NT/",4, network, "/home/callum/Desktop/ASF_Output/NT_Small/4000/Grid_16/")
-
-println("4000: 16x250 Line")
-network = path_graph(16)
-simulate_region("Inputs/sixteen4000/NT/",4, network, "/home/callum/Desktop/ASF_Output/NT_Small/4000/Line_16/")
+"""
+running the model on a metapopulation grid, note the number of populations specified 
+in Simulation_Data.csv in input directory must match the number of nodes in metapopulation 
+network or model will defualt to running on a line. Furthermore, if wanting to run on
+a single population make populations = 1 in the input file and the pop_net input can be ignored.
+"""
+println("Testing Model!")  
+network = grid([2,2]) #running on a simple grid
+simulate_region("Inputs/NT/", network, "Dummy/")

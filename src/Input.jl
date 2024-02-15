@@ -305,11 +305,11 @@ struct Model_Parameters
     ds1::Vector{UInt16}
     ds2::Vector{UInt16}
     
-    function Model_Parameters(sim, pops, sea, U0, density, area,ya, Populations,fym)
+    function Model_Parameters(sim, pops, sea, U0, density, area,ya, Populations)
         
         β_o, β_i = Beta.construction(sim, pops, Populations)
 
-        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo, ds1, ds2  = parameter_build(sim, pops, sea, U0,ya, Populations,fym)
+        μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, bw, bo, k, la, lo, ds1, ds2  = parameter_build(sim, pops, sea, U0,ya, Populations)
 
         new(β_o, β_i, μ_p, K, ζ, γ, ω, ρ, λ, κ, σ, θ, g, sim.Seasonal, bw, bo, k, la, lo, density, area, Populations, ds1, ds2)
     end
@@ -327,7 +327,7 @@ struct Model_Data
     Parameters::Model_Parameters #Model parameters
     #Populations_data::Vector{Population_Data} #distributions for params
 
-    function Model_Data(Path, pop_net, year_array,fym; verbose = false)
+    function Model_Data(Path, pop_net, year_array; verbose = false)
         #custom_network parameter used for fitting!
         sim, pops, sea = read_inputs(Path, verbose)
         Time = (sim.S_day,sim.years*365+sim.S_day)
@@ -336,7 +336,7 @@ struct Model_Data
     
         #Now using network to build init pops
         S0, density, area = Population.build_s(sim, pops, counts, verbose) #initial populations     
-        Parameters = Model_Parameters(sim, pops, sea, S0, density, area, year_array, counts,fym)
+        Parameters = Model_Parameters(sim, pops, sea, S0, density, area, year_array, counts)
         U0 = Population.spinup_and_seed(sim,pops, S0,Parameters, verbose) #burn in pop to desired start day and seed desired ASF!
         new(sim.Model,Time, sim.N_ensemble, U0, Parameters)
     end
@@ -351,7 +351,7 @@ function day_to_rate(Mean, STD)
     return [mean_rate, std_rate]
 end
 
-function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
+function parameter_build(sim, pops, sea, init_pops,ya, counts)
     #=
     Function that builds most parameters for model
     =# 
@@ -366,7 +366,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
     if ya == 0 
         ya = ones(Int8,ny)
     elseif length(ya) != ny
-        @warn "Input year array wrong length!"
+        @warn "Input year array wrong length! Defaulting to high Mortality rate"
         ya = ones(Int8,ny)
     end
 
@@ -397,7 +397,7 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
     ds1 = zeros(UInt16, cs[2]-cs[1])
     ds2 = zeros(UInt16, cs[2]-cs[1])
     
-    for i in 1:n_pops
+    for i in 1:n_pops #building for each population
 
         dummy_μp = Vector{Vector{Float32}}(undef,ny)
         dummy_k = Vector{Vector{Float32}}(undef,ny)
@@ -407,8 +407,6 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
         data =  pops[j]
         data_s = sea[j]
 
-        nf = counts.feral[i]
-        nl = counts.farm[i]
         nt = counts.total[i]
     
         σ[i] = data.Density_rate[1]
@@ -422,12 +420,11 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
         γ_d = TruncatedNormal(data.Recovery[1], data.Recovery[2], 0, 50) #r/d rate dist
         ρ_d = TruncatedNormal(data.Death[1], data.Death[2], 0, 1) #mortality dist
         λ_fd = TruncatedNormal(data.Decay_f[1], data.Decay_f[2], 0, 365) #corpse decay feral dist
-        λ_ld = TruncatedNormal(data.Decay_l[1], data.Decay_l[2], 0, 365) #corpse decay farm dist
         κ_d = TruncatedNormal(data.Immunity[1], data.Immunity[2], 0, 365)
         LN_d = TruncatedNormal(data.LN[1], data.LN[2], 0, 5) #number of yearly litters
         LS_d = TruncatedNormal(data.LS[1], data.LS[2], 1, 20) #litter size
-        LMH_d = TruncatedNormal(fym, data.LMH[2], 0, 1) #litter mortality rate
-        LML_d = TruncatedNormal(fym, data.LML[2], 0, 1) #litter mortality rate
+        LMH_d = TruncatedNormal(data.LMH[1], data.LMH[2], 0, 1) #1st year high mortality rate
+        LML_d = TruncatedNormal(data.LML[1], data.LML[2], 0, 1) #1st year low mortality rate
         
         ζ[i] = rand(ζ_d,nt)
         γ[i] = rand(γ_d,nt)
@@ -437,20 +434,20 @@ function parameter_build(sim, pops, sea, init_pops,ya, counts,fym)
         
 
 
-        for (ii, vv) in enumerate(ya)
+        for (ii, vv) in enumerate(ya) #going over years
             if vv == 0 # Low year
-                μp = 0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LML_d,nt)) ./ 365
+                μp = 0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LML_d,nt)) ./ 365 #determining recruitment rates for each year
             else # High year
                 μp = 0.5*rand(LN_d,nt) .* rand(LS_d,nt) .* (1 .- rand(LMH_d,nt)) ./ 365
             end
             
-            dummy_k[ii] = birthpulse_norm(data_s.Birth_width, μp)
-            dummy_μp[ii] = μp
+            dummy_k[ii] = birthpulse_norm(data_s.Birth_width, μp) #normalising birth pulse
+            dummy_μp[ii] = μp #death rate
 
         end
     
-        k[i] = dummy_k  
-        μ_p[i] = dummy_μp
+        k[i] = dummy_k  #birth pulse normalisation
+        μ_p[i] = dummy_μp #daily death rate
 
         if !sim.Fitted
             

@@ -22,11 +22,17 @@ include("Input.jl") #the input
 include("Analyse.jl") #some simple analysis
 
 
-function Model_sim(input_path; pop_net = 0, year_array = 0, fym = 0.95)
+function Model_sim(input_path; pop_net = 0, recruitment_year_array = 0)
     #wrapper function to run ASF models!
+    
+    #pop_net is metapopultion network, defaults to line for metapopultion or if a single pop no metapopulation used
+    
+    #The model allows for either high or low recruitment rates (defined in input files) recruitment_year_array allows to alternate between them.
+    #Array must be the same length as sim years. 0 for low birth rate and 1 for high. Eg two low years then three high [0,0,1,1,1]. 
+    #Defaults to high if not provided.
 
-    input = Input.Model_Data(input_path, pop_net, year_array, fym, verbose = false); #all input data!
-    n_sims  = 100#input.NR
+    input = Input.Model_Data(input_path, pop_net, recruitment_year_array, verbose = false); #all input data!
+    n_sims  = input.NR
     n_pops = input.Parameters.Populations.pop
     groups_per_pop = input.Parameters.Populations.cum_sum
     MN = input.MN

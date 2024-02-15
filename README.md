@@ -1,10 +1,12 @@
 # ASF
-An adaptable modelling framework to model a potential African Swine Fever outbreak in a metapopulation of feral and domestic pigs. A region may consist of several largely independent populations. In turn each population can consist of many groups (in a  hetrogenous configeration) that are connnected via a network, or a single large group (homogeneous config).
-
-The framework consists of three different models, all written in Julia. There is an ODE model, homogenous tau-laeping and a network based hetrogeneous tau-leaping model that includes inter-group dynamics. 
+An adaptable modelling framework to model a potential African Swine Fever outbreak in a metapopulation of feral pigs/wild boar. A region may consist of several largely independent populations. In turn each population can consist of many groups (in a heterogeneous configuration) that are connected via a network.
 
 A diagram of meta-population structure is given in below. Where each green region represents a distinct feral population. Within each feral population there are a number of groups of feral pigs, shown in yellow, that interact with each other and select other feral groups. The piggeries/domestic pig populations are shown in red and only interact with select feral groups. 
 
 ![ASF Structure](ASF_structure.png?raw=true "ASF Meta-population")
 
-The models are fit using ABC in python (via pyjulia) using pyABC. For speed I created a sysimage of the needed packages to include in the fitting process.
+region_model.jl is an example file to show how the model is run. 
+
+All model code is in the src directory. 
+
+Model input for different regions is in the Input directory. Each subdirectory is for a different region. The input directory contains a Simulation_Data.csv file that contains the meta-data for the simulation, a Population.csv file that contains population specific parameters and a Seasonal.csv file that contains parameters that can vary seasonally. 
